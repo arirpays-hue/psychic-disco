@@ -32,6 +32,13 @@
             "nextNodeId": "start",
             "feedbackHe": "✗ לא קשור לשאלה! הקצין שאל מה מטרת הביקור שלך (purpose of your visit), לא איך הייתה הטיסה.",
             "isOptimal": false
+          },
+          {
+            "textEn": "I am tourist since yesterday for two weeks.",
+            "textHe": "אני תייר מאז אתמול למשך שבועיים.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ שגיאת דקדוק! חסרה תווית הקשר ('a tourist'), ולא משלבים כך 'since yesterday' עם משך זמן עתידי.",
+            "isOptimal": false
           }
         ]
       },
@@ -517,7 +524,7 @@
   {
     "id": "hotel_crisis_resolution",
     "categoryHe": "טיסות וחו״ל",
-    "titleHe": "בעיות במלון: מזגן מקולקל, חיוב כפול והזמנת מונית שירות",
+    "titleHe": "בעיות במלון: מזגן מקולקל, חיוב כפול ושמירת מזוודות",
     "titleEn": "Hotel Troubleshooting & Billing Dispute",
     "difficultyHe": "בינוני-מתקדם",
     "nodes": [
@@ -603,7 +610,7 @@
             "textEn": "Yes, please charge me double price for everything.",
             "textHe": "כן, בבקשה תחייב אותי מחיר כפול על הכל.",
             "nextNodeId": "step3_minibar_dispute",
-            "feedbackHe": "✗ ביקשת שישלשו/יכפילו לך את המחיר במקום לתקן את החשבונית.",
+            "feedbackHe": "✗ ביקשת שיחייבו אותך מחיר כפול במקום לתקן את החשבונית.",
             "isOptimal": false
           }
         ]
@@ -642,6 +649,272 @@
         "speakerName": "Front Desk Manager",
         "speakerLineEn": "Certainly! Here are your claim tickets for the luggage room. See you at 6 PM, and enjoy your last day in town!",
         "speakerLineHe": "בוודאי! הנה פתקי השמירה לחדר המזוודות. נתראה ב-18:00, ותהנו מהיום האחרון שלכם בעיר!",
+        "isEnding": true,
+        "options": []
+      }
+    ]
+  },
+  {
+    "id": "car_rental_insurance",
+    "categoryHe": "תחבורה והתמצאות",
+    "titleHe": "השכרת רכב בחו״ל: ביטוחים, שריטות ומדיניות דלק",
+    "titleEn": "Renting a Car: Insurance, Inspection & Fuel Policy",
+    "difficultyHe": "מתקדם",
+    "nodes": [
+      {
+        "id": "start",
+        "speakerName": "Rental Agent",
+        "speakerLineEn": "Welcome to EuroDrive! I see your reservation for a compact automatic car. May I see your driver's license and credit card?",
+        "speakerLineHe": "ברוך הבא ל-EuroDrive! אני רואה את ההזמנה שלך לרכב קומפקטי אוטומטי. אפשר לראות את רישיון הנהיגה וכרטיס האשראי שלך?",
+        "options": [
+          {
+            "textEn": "Here you go. Both my international driving permit and credit card are under my name.",
+            "textHe": "בבקשה. גם רישיון הנהיגה הבינלאומי שלי וגם כרטיס האשראי רשומים על שמי.",
+            "nextNodeId": "step2_insurance_coverage",
+            "feedbackHe": "✓ מצוין! 'International driving permit' ו-'under my name' הם ביטויים מדויקים.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "I forgot my license at home, can I drive without it?",
+            "textHe": "שכחתי את הרישיון בבית, אפשר לנהוג בלעדיו?",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ אי אפשר לשכור רכב בחו״ל ללא רישיון נהיגה תקף.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Yes, I want to buy this car forever.",
+            "textHe": "כן, אני רוצה לקנות את הרכב הזה לתמיד.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ אתה נמצא בדלפק השכרת רכב (Car Rental), לא בסוכנות למכירת רכבים.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "step2_insurance_coverage",
+        "speakerName": "Rental Agent",
+        "speakerLineEn": "Your basic booking has a €1,200 deductible in case of damage. Would you like to add full zero-deductible coverage?",
+        "speakerLineHe": "ההזמנה הבסיסית שלך כוללת השתתפות עצמית של 1,200 אירו במקרה של נזק. האם תרצה להוסיף כיסוי מלא ללא השתתפות עצמית?",
+        "options": [
+          {
+            "textEn": "Yes, please add full coverage with zero deductible so I can have complete peace of mind.",
+            "textHe": "כן, אנא הוסף כיסוי מלא עם אפס השתתפות עצמית כדי שיהיה לי שקט נפשי מוחלט.",
+            "nextNodeId": "step3_fuel_policy",
+            "feedbackHe": "✓ אוצר מילים חשוב מאוד! 'Deductible' = השתתפות עצמית בביטוח.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "No problem, I plan to crash the car into a tree tomorrow.",
+            "textHe": "אין בעיה, אני מתכנן לרסק את הרכב לתוך עץ מחר.",
+            "nextNodeId": "step2_insurance_coverage",
+            "feedbackHe": "✗ תשובה אבסורדית שתגרום לסוכן לבטל לך את השכרת הרכב.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "What is the meaning of twelve hundred?",
+            "textHe": "מה המשמעות של שתים עשרה מאות?",
+            "nextNodeId": "step2_insurance_coverage",
+            "feedbackHe": "✗ 'Twelve hundred' זו דרך נפוצה מאוד באנגלית לומר 1,200. לא ענית על שאלת הביטוח.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "step3_fuel_policy",
+        "speakerName": "Rental Agent",
+        "speakerLineEn": "Great, you're fully covered. Our fuel policy is full-to-full, and the car takes unleaded gasoline—not diesel.",
+        "speakerLineHe": "מעולה, אתה מכוסה במלואו. מדיניות הדלק שלנו היא 'מלא-למלא', והרכב צורך בנזין נטול עופרת — לא סולר.",
+        "options": [
+          {
+            "textEn": "Got it—I'll make sure to refill the tank with unleaded gas right before returning the car.",
+            "textHe": "הבנתי — אדאג למלא מחדש את המיכל בבנזין נטול עופרת ממש לפני החזרת הרכב.",
+            "nextNodeId": "step4_scratch_inspection",
+            "feedbackHe": "✓ מעולה! 'Refill the tank' ו-'unleaded gas' מראים הבנה מלאה של ההנחיות.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "Okay, I will fill the car with water before I bring it back.",
+            "textHe": "אוקיי, אמלא את הרכב במים לפני שאחזיר אותו.",
+            "nextNodeId": "step3_fuel_policy",
+            "feedbackHe": "✗ תשובה לא הגיונית (למלא את מיכל הדלק במים).",
+            "isOptimal": false
+          },
+          {
+            "textEn": "So I need to put diesel in the engine, right?",
+            "textHe": "אז אני צריך לשים סולר במנוע, נכון?",
+            "nextNodeId": "step3_fuel_policy",
+            "feedbackHe": "✗ הפוך! הסוכן הדגיש במפורש שהרכב נוסע על בנזין (unleaded gasoline) ולא על סולר (not diesel).",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "step4_scratch_inspection",
+        "speakerName": "Parking Attendant",
+        "speakerLineEn": "Here is your silver hatchback in bay 14. Before you drive off, please check the exterior and sign this condition report.",
+        "speakerLineHe": "הנה רכב ההאצ'בק הכסוף שלך בחניה 14. לפני שתצא לדרך, אנא בדוק את החלק החיצוני וחתום על דוח מצב הרכב.",
+        "options": [
+          {
+            "textEn": "Wait a second—there's a deep scratch on the rear bumper that isn't marked on the diagram. Could you note it before I sign?",
+            "textHe": "חכה שנייה — יש שריטה עמוקה על הפגוש האחורי שלא מסומנת בשרטוט. תוכל לציין אותה לפני שאני חותם?",
+            "nextNodeId": "ending_car_rental",
+            "feedbackHe": "✓ משפט מציל כסף בחו״ל! 'Rear bumper' = פגוש אחורי, וביקשת לתעד את השריטה מראש.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "I sign without looking, I don't care about scratches.",
+            "textHe": "אני חותם בלי להסתכל, לא אכפת לי משריטות.",
+            "nextNodeId": "step4_scratch_inspection",
+            "feedbackHe": "✗ טעות קריטית בהשכרת רכב: חתימה ללא תיעוד שריטות קיימות תגרום לחיוב שלך בעת ההחזרה.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Where is the steering wheel of the airplane?",
+            "textHe": "איפה ההגה של המטוס?",
+            "nextNodeId": "step4_scratch_inspection",
+            "feedbackHe": "✗ לא קשור לסיטואציה.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "ending_car_rental",
+        "speakerName": "Parking Attendant",
+        "speakerLineEn": "Good catch! I've documented the rear bumper scratch and took a photo for your file. Drive safely!",
+        "speakerLineHe": "תפיסה טובה! תיעדתי את השריטה בפגוש האחורי וצילמתי תמונה לתיק שלך. סע בזהירות!",
+        "isEnding": true,
+        "options": []
+      }
+    ]
+  },
+  {
+    "id": "doctor_pharmacy_full",
+    "categoryHe": "חירום ובריאות",
+    "titleHe": "מרפאה ובית מרקחת: תיאור תסמינים, מרשם ואישור לביטוח",
+    "titleEn": "Medical Clinic & Pharmacy Abroad",
+    "difficultyHe": "בינוני-מתקדם",
+    "nodes": [
+      {
+        "id": "start",
+        "speakerName": "Clinic Doctor",
+        "speakerLineEn": "Come in and have a seat. What brings you to the clinic today, and how long have you been feeling unwell?",
+        "speakerLineHe": "היכנס ושב בבקשה. מה מביא אותך למרפאה היום, וכמה זמן אתה כבר מרגיש לא טוב?",
+        "options": [
+          {
+            "textEn": "I've had a sharp pain in my right ear and a high fever for the past two days.",
+            "textHe": "יש לי כאב חד באוזן ימין וחום גבוה ביומיים האחרונים.",
+            "nextNodeId": "step2_allergies",
+            "feedbackHe": "✓ מצוין! שימוש מדויק ב-Present Perfect ('I've had... for the past two days').",
+            "isOptimal": true
+          },
+          {
+            "textEn": "My ear is crying since two days ago and I am very hot.",
+            "textHe": "האוזן שלי בוכה מלפני יומיים ואני חם מאוד.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ טעות תרגום מילולי! באנגלית 'I am hot' פירושו 'חם לי', בעוד שלחום רפואי אומרים 'I have a fever'.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "I came here to buy a ticket for the concert.",
+            "textHe": "באתי לכאן כדי לקנות כרטיס להופעה.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ לא קשור! אתה נמצא במרפאה מול רופא.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "step2_allergies",
+        "speakerName": "Clinic Doctor",
+        "speakerLineEn": "Let me take a look with the otoscope. Yes, it's an ear infection. Are you taking any regular medication or allergic to antibiotics?",
+        "speakerLineHe": "תן לי להסתכל עם האוטוסקופ. כן, זו דלקת אוזניים. האם אתה נוטל תרופות קבועות או אלרגי לאנטיביוטיקה?",
+        "options": [
+          {
+            "textEn": "I don't take any daily medication, and I have no known drug allergies.",
+            "textHe": "אני לא נוטל תרופות יומיות, ואין לי אלרגיות ידועות לתרופות.",
+            "nextNodeId": "step3_insurance_receipt",
+            "feedbackHe": "✓ תשובה רפואית ברורה ומדויקת ('no known drug allergies').",
+            "isOptimal": true
+          },
+          {
+            "textEn": "Yes, I am very allergic to ear infections.",
+            "textHe": "כן, אני מאוד אלרגי לדלקות אוזניים.",
+            "nextNodeId": "step2_allergies",
+            "feedbackHe": "✗ הרופא שאל אם אתה אלרגי לאנטיביוטיקה (תרופות), לא לדלקת עצמה.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "I eat three antibiotics every morning for fun.",
+            "textHe": "אני אוכל שלוש אנטיביוטיקות כל בוקר בשביל הכיף.",
+            "nextNodeId": "step2_allergies",
+            "feedbackHe": "✗ תשובה שגויה ולא הגיונית.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "step3_insurance_receipt",
+        "speakerName": "Clinic Doctor",
+        "speakerLineEn": "I'm prescribing antibiotic ear drops and pain relievers. Is there anything else you need before heading to the pharmacy?",
+        "speakerLineHe": "אני רושם לך טיפות אוזניים אנטיביוטיות ומשככי כאבים. האם יש משהו נוסף שאתה צריך לפני שתלך לבית המרקחת?",
+        "options": [
+          {
+            "textEn": "Could I get a signed medical report and an official receipt so I can file a claim with my travel insurance?",
+            "textHe": "האם אוכל לקבל דוח רפואי חתום וקבלה רשמית כדי שאוכל להגיש תביעה לביטוח הנסיעות שלי?",
+            "nextNodeId": "step4_pharmacy_dosage",
+            "feedbackHe": "✓ מעולה! 'File a claim with my travel insurance' הוא ביטוי חיוני לכל מטייל בחו״ל.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "Can you give me your stethoscope as a souvenir?",
+            "textHe": "אתה יכול לתת לי את הסטטוסקופ שלך כמזכרת?",
+            "nextNodeId": "step3_insurance_receipt",
+            "feedbackHe": "✗ לא רלוונטי לסיטואציה.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "No, I don't want the prescription, I prefer to stay sick.",
+            "textHe": "לא, אני לא רוצה את המרשם, אני מעדיף להישאר חולה.",
+            "nextNodeId": "step3_insurance_receipt",
+            "feedbackHe": "✗ תשובה שגויה.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "step4_pharmacy_dosage",
+        "speakerName": "Pharmacist",
+        "speakerLineEn": "Hello! I've prepared the ear drops and tablets from your doctor's prescription. Do you have any questions about the dosage?",
+        "speakerLineHe": "שלום! הכנתי את טיפות האוזניים והכדורים מהמרשם של הרופא שלך. האם יש לך שאלות לגבי המינון?",
+        "options": [
+          {
+            "textEn": "Yes, how many drops should I use per dose, and can I take the painkillers on an empty stomach?",
+            "textHe": "כן, בכמה טיפות עליי להשתמש בכל מנה, והאם מותר לי לקחת את משככי הכאבים על קיבה ריקה?",
+            "nextNodeId": "ending_clinic_pharmacy",
+            "feedbackHe": "✓ מושלם! 'On an empty stomach' = על קיבה ריקה.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "Should I drink the ear drops with coffee?",
+            "textHe": "האם עליי לשתות את טיפות האוזניים עם קפה?",
+            "nextNodeId": "step4_pharmacy_dosage",
+            "feedbackHe": "✗ טיפות אוזניים (ear drops) מיועדות לאוזן בלבד, לא לשתייה!",
+            "isOptimal": false
+          },
+          {
+            "textEn": "How much kilometer is the dosage?",
+            "textHe": "כמה קילומטר זה המינון?",
+            "nextNodeId": "step4_pharmacy_dosage",
+            "feedbackHe": "✗ שגיאה! Dosage פירושו מינון תרופתי, לא מרחק בקילומטרים.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "ending_clinic_pharmacy",
+        "speakerName": "Pharmacist",
+        "speakerLineEn": "Use three drops twice daily, and always take the painkillers after a meal. Wishing you a speedy recovery!",
+        "speakerLineHe": "השתמש בשלוש טיפות פעמיים ביום, ותמיד קח את משככי הכאבים אחרי ארוחה. מאחל לך החלמה מהירה!",
         "isEnding": true,
         "options": []
       }
