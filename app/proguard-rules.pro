@@ -1,0 +1,3 @@
+-keep class com.example.englishtutor.WordCard { *; }
+-keep class com.example.englishtutor.StudyFilter { *; }
+-dontwarn androidx.compose.**
