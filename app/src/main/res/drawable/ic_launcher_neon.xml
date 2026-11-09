@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- רקע כהה יוקרתי -->
+    <path
+        android:fillColor="#080B12"
+        android:pathData="M0,0h108v108h-108z" />
+
+    <!-- הילה אחורית (כרטיס מוטה) -->
+    <path
+        android:fillColor="#14192B"
+        android:strokeColor="#B388FF"
+        android:strokeWidth="2.5"
+        android:pathData="M28,22 L76,18 C80,18 83,21 83,25 L83,75 C83,79 80,82 76,82 L28,86 C24,86 21,83 21,79 L21,29 C21,25 24,22 28,22 Z" />
+
+    <!-- כרטיס ראשי עם מסגרת טורקיז ניאון -->
+    <path
+        android:fillColor="#161F38"
+        android:strokeColor="#00F0FF"
+        android:strokeWidth="3.5"
+        android:pathData="M30,24 L78,24 C82.4,24 86,27.6 86,32 L86,78 C86,82.4 82.4,86 78,86 L30,86 C25.6,86 22,82.4 22,78 L22,32 C22,27.6 25.6,24 30,24 Z" />
+
+    <!-- האות A בניאון זוהר במרכז הכרטיס -->
+    <path
+        android:fillColor="#00F0FF"
+        android:pathData="M54,36 L39,72 L46,72 L49.5,63 L58.5,63 L62,72 L69,72 L54,36 Z M51.5,57 L54,49.5 L56.5,57 L51.5,57 Z" />
+
+    <!-- כוכב ניאון קטן בפינה העליונה -->
+    <path
+        android:fillColor="#00E676"
+        android:pathData="M73,33 L74.5,36.5 L78,38 L74.5,39.5 L73,43 L71.5,39.5 L68,38 L71.5,36.5 Z" />
+</vector>
