@@ -3,10 +3,16 @@ package com.example.englishtutor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -15,12 +21,31 @@ class MainActivity : ComponentActivity() {
         val repository = WordRepository(applicationContext)
 
         setContent {
-            val wordList = remember { repository.loadWords() }
+            var wordList by remember { mutableStateOf<List<WordCard>?>(null) }
+
+            LaunchedEffect(Unit) {
+                wordList = withContext(Dispatchers.IO) {
+                    repository.loadWords()
+                }
+            }
+
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = DarkBg
             ) {
-                FlashcardScreen(words = wordList, repository = repository)
+                val loaded = wordList
+                if (loaded == null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(DarkBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = TealNeon)
+                    }
+                } else {
+                    FlashcardScreen(words = loaded, repository = repository)
+                }
             }
         }
     }
