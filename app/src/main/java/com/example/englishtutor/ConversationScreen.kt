@@ -46,6 +46,20 @@ import kotlin.math.roundToInt
 
 val ErrorCrimson = Color(0xFFFF4D6D)
 
+// מחלקת עזר ששומרת אפשרויות שנוצרו ב-AI ללא צורך בסוגריים זוויתיים מקוננים
+class AiOptionsStore {
+    private val map = HashMap<String, MutableList<DialogueOption>>()
+
+    fun getOptions(key: String): List<DialogueOption> {
+        return map[key]?.toList() ?: emptyList()
+    }
+
+    fun addOptions(key: String, newItems: List<DialogueOption>) {
+        val current = map.getOrPut(key) { mutableListOf() }
+        current.addAll(newItems)
+    }
+}
+
 @Composable
 fun ConversationScreen(
     scenarios: List<ConversationScenario>,
@@ -57,15 +71,16 @@ fun ConversationScreen(
 
     var allScenarios by remember(scenarios) { mutableStateOf(scenarios) }
     var selectedCategory by remember { mutableStateOf("הכל") }
-    var activeScenario by remember { mutableStateOf<ConversationScenario?>(null) }
+    var activeScenarioId by remember { mutableStateOf("") }
     var currentNodeId by remember { mutableStateOf("start") }
     var stepNumber by remember { mutableIntStateOf(1) }
 
     // זרע ערבוב שמשתנה בכל שלב, בכל אתחול ובכל טעות כדי שהתשובות יתערבבו מחדש!
     var shuffleSeed by remember { mutableIntStateOf(0) }
 
-    // תוספת תשובות דינמית שנוצרה על ידי ה-AI עבור השלב הנוכחי
-    var aiAddedOptionsMap by remember { mutableStateOf>>(emptyMap()) }
+    // מאגר תשובות שנוספו על ידי ה-AI
+    val aiStore = remember { AiOptionsStore() }
+    var aiStoreVersion by remember { mutableIntStateOf(0) }
     var isGeneratingMoreOptions by remember { mutableStateOf(false) }
 
     // דיאלוג יצירת שיחה חדשה ב-AI
@@ -74,16 +89,20 @@ fun ConversationScreen(
     var aiTopicInput by remember { mutableStateOf("") }
     var aiDifficultySelected by remember { mutableStateOf("בינוני-מתקדם") }
     var isGeneratingScenario by remember { mutableStateOf(false) }
-    var aiStatusMessage by remember { mutableStateOf<String?>(null) }
+    var aiStatusMessage by remember { mutableStateOf("") }
 
     var livesRemaining by remember { mutableIntStateOf(3) }
     var scorePoints by remember { mutableIntStateOf(0) }
-    var wrongTextsInCurrentNode by remember { mutableStateOf(setOf<String>()) }
+    var wrongTextsInCurrentNode by remember { mutableStateOf(emptySet<String>()) }
 
     var showHebrewTranslation by remember { mutableStateOf(false) }
-    var lastFeedback by remember { mutableStateOf<String?>(null) }
+    var lastFeedback by remember { mutableStateOf("") }
     var lastChoiceOptimal by remember { mutableStateOf(true) }
     var completionRefresh by remember { mutableIntStateOf(0) }
+
+    val activeScenario = remember(allScenarios, activeScenarioId) {
+        allScenarios.firstOrNull { it.id == activeScenarioId }
+    }
 
     val shakeOffsetX = remember { Animatable(0f) }
 
@@ -96,23 +115,23 @@ fun ConversationScreen(
         }
     }
 
-    val categories: List<String> = remember(allScenarios) {
+    val categories = remember(allScenarios) {
         listOf("הכל") + allScenarios.map { it.categoryHe }.distinct()
     }
 
-    val filteredScenarios: List<ConversationScenario> = remember(allScenarios, selectedCategory) {
+    val filteredScenarios = remember(allScenarios, selectedCategory) {
         if (selectedCategory == "הכל") allScenarios
         else allScenarios.filter { it.categoryHe == selectedCategory }
     }
 
-    LaunchedEffect(activeScenario?.id, currentNodeId) {
+    LaunchedEffect(activeScenarioId, currentNodeId) {
         wrongTextsInCurrentNode = emptySet()
         shuffleSeed++
         val node = activeScenario?.nodes?.get(currentNodeId)
         if (node != null) {
             onSpeakEnglish(node.speakerLineEn)
             if (node.isEnding && activeScenario != null && livesRemaining > 0) {
-                repository.markScenarioCompleted(activeScenario!!.id)
+                repository.markScenarioCompleted(activeScenario.id)
                 completionRefresh++
             }
         }
@@ -147,7 +166,7 @@ fun ConversationScreen(
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
                 ) {
                     Text(
-                        text = if (activeScenario == null) "סימולציות שיחה + AI" else activeScenario!!.titleHe,
+                        text = if (activeScenario == null) "סימולציות שיחה + AI" else activeScenario.titleHe,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White,
@@ -165,8 +184,8 @@ fun ConversationScreen(
                 if (activeScenario != null) {
                     IconButton(
                         onClick = {
-                            activeScenario = null
-                            lastFeedback = null
+                            activeScenarioId = ""
+                            lastFeedback = ""
                         },
                         modifier = Modifier
                             .size(44.dp)
@@ -196,7 +215,7 @@ fun ConversationScreen(
                 // --- כפתור יצירת שיחה חדשה באמצעות מודל AI מקוון ---
                 Button(
                     onClick = {
-                        aiStatusMessage = null
+                        aiStatusMessage = ""
                         showAiGeneratorDialog = true
                     },
                     modifier = Modifier
@@ -218,7 +237,7 @@ fun ConversationScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // סרגל קטגוריות בגלילה אופקית בטוחה
+                // סרגל קטגוריות
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
@@ -251,7 +270,7 @@ fun ConversationScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // רשימת תרחישי השיחה בגלילה אנכית חלקה
+                // רשימת תרחישי השיחה
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier
@@ -277,12 +296,12 @@ fun ConversationScreen(
                                     RoundedCornerShape(20.dp)
                                 )
                                 .clickable {
-                                    activeScenario = scenario
+                                    activeScenarioId = scenario.id
                                     currentNodeId = "start"
                                     stepNumber = 1
                                     livesRemaining = 3
                                     scorePoints = 0
-                                    lastFeedback = null
+                                    lastFeedback = ""
                                     showHebrewTranslation = false
                                     shuffleSeed++
                                 },
@@ -352,15 +371,16 @@ fun ConversationScreen(
                 }
             } else {
                 // --- מסך ניהול השיחה החיה ---
-                val scenario = activeScenario!!
-                val node = scenario.nodes[currentNodeId] ?: scenario.nodes.values.first()
-                val totalStages = (scenario.nodes.size - 1).coerceAtLeast(1)
-                val nodeKey = "${scenario.id}_${node.id}"
-                val extraAiOptions = aiAddedOptionsMap[nodeKey].orEmpty()
+                val node = activeScenario.nodes[currentNodeId] ?: activeScenario.nodes.values.first()
+                val totalStages = (activeScenario.nodes.size - 1).coerceAtLeast(1)
+                val nodeKey = "${activeScenario.id}_${node.id}"
 
-                // ערבוב מחדש בכל פעם ש-shuffleSeed או מספר התשובות משתנה!
-                val shuffledOptions: List<DialogueOption> = remember(scenario.id, currentNodeId, shuffleSeed, extraAiOptions.size) {
-                    (node.options + extraAiOptions).distinctBy { it.textEn.lowercase() }.shuffled()
+                // מיזוג האפשרויות הרגילות עם אלו שה-AI יצר וערבוב מחדש בכל ניסיון או טעות!
+                val shuffledOptions = remember(activeScenario.id, currentNodeId, shuffleSeed, aiStoreVersion) {
+                    val combined = ArrayList<DialogueOption>()
+                    combined.addAll(node.options)
+                    combined.addAll(aiStore.getOptions(nodeKey))
+                    combined.distinctBy { optionItem -> optionItem.textEn.lowercase() }.shuffled()
                 }
 
                 // שורת לבבות ומד התקדמות
@@ -418,7 +438,7 @@ fun ConversationScreen(
                                 )
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Text(
-                                    text = lastFeedback ?: "ביצעת 3 טעויות. האפשרויות יתערבבו מחדש בניסיון הבא!",
+                                    text = if (lastFeedback.isNotEmpty()) lastFeedback else "ביצעת 3 טעויות. האפשרויות יתערבבו מחדש בניסיון הבא!",
                                     fontSize = 15.sp,
                                     color = Color.LightGray,
                                     textAlign = TextAlign.Center
@@ -430,7 +450,7 @@ fun ConversationScreen(
                                         stepNumber = 1
                                         livesRemaining = 3
                                         scorePoints = 0
-                                        lastFeedback = null
+                                        lastFeedback = ""
                                         wrongTextsInCurrentNode = emptySet()
                                         shuffleSeed++
                                     },
@@ -457,7 +477,7 @@ fun ConversationScreen(
                                 .offset { IntOffset(shakeOffsetX.value.roundToInt(), 0) }
                         ) {
                             AnimatedVisibility(
-                                visible = lastFeedback != null,
+                                visible = lastFeedback.isNotEmpty(),
                                 enter = expandVertically() + fadeIn(),
                                 exit = shrinkVertically() + fadeOut()
                             ) {
@@ -478,7 +498,7 @@ fun ConversationScreen(
                                         .padding(12.dp)
                                 ) {
                                     Text(
-                                        text = lastFeedback ?: "",
+                                        text = lastFeedback,
                                         fontSize = 13.sp,
                                         color = if (lastChoiceOptimal) CheckNeon else ErrorCrimson,
                                         fontWeight = FontWeight.Bold
@@ -597,7 +617,7 @@ fun ConversationScreen(
                                                     stepNumber = 1
                                                     livesRemaining = 3
                                                     scorePoints = 0
-                                                    lastFeedback = null
+                                                    lastFeedback = ""
                                                     shuffleSeed++
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = TealDark)
@@ -608,8 +628,8 @@ fun ConversationScreen(
                                             }
                                             Button(
                                                 onClick = {
-                                                    activeScenario = null
-                                                    lastFeedback = null
+                                                    activeScenarioId = ""
+                                                    lastFeedback = ""
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = PurpleNeon.copy(alpha = 0.25f))
                                             ) {
@@ -636,13 +656,13 @@ fun ConversationScreen(
                                         onClick = {
                                             if (!isGeneratingMoreOptions) {
                                                 isGeneratingMoreOptions = true
-                                                val optimalNextId = node.options.firstOrNull { it.isOptimal }?.nextNodeId ?: "start"
+                                                val optimalNextId = node.options.firstOrNull { opt -> opt.isOptimal }?.nextNodeId ?: "start"
                                                 scope.launch {
                                                     val res = repository.generateExtraAiOptionsForNode(node, optimalNextId)
                                                     isGeneratingMoreOptions = false
                                                     res.onSuccess { newOpts ->
-                                                        val currentExtra = aiAddedOptionsMap[nodeKey].orEmpty()
-                                                        aiAddedOptionsMap = aiAddedOptionsMap + (nodeKey to (currentExtra + newOpts))
+                                                        aiStore.addOptions(nodeKey, newOpts)
+                                                        aiStoreVersion++
                                                         shuffleSeed++
                                                         lastChoiceOptimal = true
                                                         lastFeedback = "✨ מודל ה-AI הוסיף ${newOpts.size} אפשרויות חדשות וערבב את הרשימה!"
@@ -698,7 +718,9 @@ fun ConversationScreen(
                                                     stepNumber++
                                                     currentNodeId = option.nextNodeId
                                                 } else {
-                                                    wrongTextsInCurrentNode = wrongTextsInCurrentNode + option.textEn
+                                                    val updatedSet = HashSet(wrongTextsInCurrentNode)
+                                                    updatedSet.add(option.textEn)
+                                                    wrongTextsInCurrentNode = updatedSet
                                                     livesRemaining--
                                                     shuffleSeed++ // ערבוב מיידי של כל הכרטיסים אחרי טעות!
                                                     triggerErrorShake()
@@ -754,7 +776,7 @@ fun ConversationScreen(
 
         // --- דיאלוג יצירת שיחה חדשה באמצעות מודל AI מקוון ---
         if (showAiGeneratorDialog) {
-            val quickTopics: List<String> = listOf(
+            val quickTopics = listOf(
                 "בדיקה ביטחונית ותשאול מעמיק בשדה תעופה",
                 "ראיון עבודה לחברת סייבר והייטק",
                 "הזמנת אוכל במסעדת שף והחזרת מנה",
@@ -762,7 +784,7 @@ fun ConversationScreen(
                 "פנייה לרופא שיניים בחירום בחו״ל",
                 "פתיחת חשבון בנק והנפקת כרטיס אשראי"
             )
-            val difficultyOptions: List<String> = listOf("בינוני", "בינוני-מתקדם", "מתקדם מאוד")
+            val difficultyOptions = listOf("בינוני", "בינוני-מתקדם", "מתקדם מאוד")
 
             AlertDialog(
                 onDismissRequest = { if (!isGeneratingScenario) showAiGeneratorDialog = false },
@@ -786,7 +808,7 @@ fun ConversationScreen(
 
                         OutlinedTextField(
                             value = aiTopicInput,
-                            onValueChange = { newValue: String -> aiTopicInput = newValue },
+                            onValueChange = { newValue -> aiTopicInput = newValue },
                             placeholder = { Text("למשל: החלפת מוצר פגום בחנות בארה״ב...", color = Color.Gray) },
                             singleLine = false,
                             maxLines = 2,
@@ -803,7 +825,6 @@ fun ConversationScreen(
                         Text("או לחץ על נושא מהיר:", color = StarGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        // גלילה אופקית עם Row תקני (ללא LazyRow בתוך AlertDialog)
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier
@@ -863,9 +884,9 @@ fun ConversationScreen(
                             }
                         }
 
-                        if (aiStatusMessage != null) {
+                        if (aiStatusMessage.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(10.dp))
-                            Text(aiStatusMessage!!, color = ErrorCrimson, fontSize = 12.sp)
+                            Text(aiStatusMessage, color = ErrorCrimson, fontSize = 12.sp)
                         }
                     }
                 },
@@ -875,20 +896,23 @@ fun ConversationScreen(
                         onClick = {
                             val chosenTopic = aiTopicInput.ifBlank { quickTopics.random() }
                             isGeneratingScenario = true
-                            aiStatusMessage = null
+                            aiStatusMessage = ""
                             scope.launch {
                                 val result = repository.generateOnlineAiScenario(chosenTopic, aiDifficultySelected)
                                 isGeneratingScenario = false
                                 result.onSuccess { newScenario ->
-                                    allScenarios = listOf(newScenario) + allScenarios
+                                    val updatedList = ArrayList<ConversationScenario>()
+                                    updatedList.add(newScenario)
+                                    updatedList.addAll(allScenarios)
+                                    allScenarios = updatedList
                                     showAiGeneratorDialog = false
                                     aiTopicInput = ""
-                                    activeScenario = newScenario
+                                    activeScenarioId = newScenario.id
                                     currentNodeId = "start"
                                     stepNumber = 1
                                     livesRemaining = 3
                                     scorePoints = 0
-                                    lastFeedback = null
+                                    lastFeedback = ""
                                     shuffleSeed++
                                 }.onFailure { err ->
                                     aiStatusMessage = "שגיאה ביצירת השיחה: ודא חיבור לאינטרנט או נסה שוב (${err.localizedMessage ?: "Timeout"})."
@@ -930,7 +954,7 @@ fun ConversationScreen(
                         Spacer(modifier = Modifier.height(10.dp))
                         OutlinedTextField(
                             value = apiKeyInput,
-                            onValueChange = { newValue: String -> apiKeyInput = newValue },
+                            onValueChange = { newValue -> apiKeyInput = newValue },
                             placeholder = { Text("השאר ריק לשימוש במנוע החינמי המובנה", color = Color.Gray) },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
