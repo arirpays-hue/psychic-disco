@@ -1,565 +1,647 @@
 [
   {
-    "id": "airport_passport_control",
+    "id": "airport_full_journey",
     "categoryHe": "טיסות וחו״ל",
-    "titleHe": "ביקורת דרכונים ומכס בשדה התעופה",
-    "titleEn": "Airport Passport Control & Customs",
-    "difficultyHe": "בינוני",
+    "titleHe": "מסע מלא בשדה התעופה: דרכון, מכס, כבודה ומונית",
+    "titleEn": "Full Airport Arrival: Immigration, Customs & Baggage",
+    "difficultyHe": "בינוני-מתקדם",
     "nodes": [
       {
         "id": "start",
         "speakerName": "Border Officer",
-        "speakerLineEn": "Good morning. May I see your passport and boarding pass, please? What is the purpose of your visit?",
-        "speakerLineHe": "בוקר טוב. אפשר לראות את הדרכון וכרטיס העלייה למטוס בבקשה? מהי מטרת הביקור שלך?",
+        "speakerLineEn": "Good morning. May I see your passport and boarding pass, please? What is the purpose of your visit to the United States?",
+        "speakerLineHe": "בוקר טוב. אפשר לראות את הדרכון וכרטיס העלייה למטוס בבקשה? מהי מטרת הביקור שלך בארצות הברית?",
         "options": [
           {
-            "textEn": "Here they are. I am here on vacation for ten days to explore the city.",
-            "textHe": "הנה הם. אני כאן בחופשה לעשרה ימים כדי לטייל בעיר.",
-            "nextNodeId": "accommodation_check",
-            "feedbackHe": "מעולה! תשובה מנומסת, ברורה ומדויקת.",
+            "textEn": "Here they are. I am visiting on vacation for two weeks to travel and see the sights.",
+            "textHe": "הנה הם. אני מבקר בחופשה לשבועיים כדי לטייל ולראות את האתרים.",
+            "nextNodeId": "step2_accommodation",
+            "feedbackHe": "✓ תשובה מצוינת! מנומסת, ברורה ודקדוקית.",
             "isOptimal": true
           },
           {
-            "textEn": "I came for a tech conference and business meetings for one week.",
-            "textHe": "הגעתי לכנס טכנולוגי ולפגישות עסקיות למשך שבוע.",
-            "nextNodeId": "business_check",
-            "feedbackHe": "מצוין! תשובה עסקית רשמית ורהוטה.",
-            "isOptimal": true
+            "textEn": "Take it. I am here for make fun two weeks.",
+            "textHe": "קח את זה. אני פה בשביל לעשות כיף שבועיים.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ שגיאה! באנגלית לא אומרים 'for make fun' (תרגום מילולי מעברית), והפנייה 'Take it' בוטה מדי מול קצין גבול.",
+            "isOptimal": false
           },
           {
-            "textEn": "Take the passport. I just walk around.",
-            "textHe": "קח את הדרכון. אני סתם מסתובב.",
-            "nextNodeId": "accommodation_check",
-            "feedbackHe": "שים לב: הניסוח מעט ישיר מדי מול קצין גבול, עדיף להשתמש ב-'Here you go'.",
+            "textEn": "Yes, my flight was very long and the food in the airplane was cold.",
+            "textHe": "כן, הטיסה שלי הייתה ארוכה מאוד והאוכל במטוס היה קר.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ לא קשור לשאלה! הקצין שאל מה מטרת הביקור שלך (purpose of your visit), לא איך הייתה הטיסה.",
             "isOptimal": false
           }
         ]
       },
       {
-        "id": "accommodation_check",
+        "id": "step2_accommodation",
         "speakerName": "Border Officer",
-        "speakerLineEn": "I see. Where will you be staying during your trip, and do you have a return ticket?",
-        "speakerLineHe": "אני מבין. היכן תשהה במהלך הטיול שלך, והאם יש לך כרטיס טיסה חזור?",
+        "speakerLineEn": "Where will you be staying during your trip, and do you have a confirmed return ticket?",
+        "speakerLineHe": "היכן תשהה במהלך הטיול שלך, והאם יש לך כרטיס טיסה חזור מאושר?",
         "options": [
           {
-            "textEn": "I have a reservation at the Grand Central Hotel, and my return flight is next Friday.",
-            "textHe": "יש לי הזמנה במלון גרנד סנטרל, וטיסת החזור שלי היא ביום שישי הבא.",
-            "nextNodeId": "customs_baggage",
-            "feedbackHe": "נהדר! השתמשת נכון במילה reservation (הזמנה).",
+            "textEn": "I have a reservation at the Midtown Hotel, and my return flight is on the 24th of this month.",
+            "textHe": "יש לי הזמנה במלון מידטאון, וטיסת החזור שלי היא ב-24 לחודש זה.",
+            "nextNodeId": "step3_occupation",
+            "feedbackHe": "✓ מעולה! השתמשת נכון ב-reservation ובציון תאריך מדויק.",
             "isOptimal": true
           },
           {
-            "textEn": "I am staying with close friends in Manhattan. Here is my confirmed return ticket.",
-            "textHe": "אני מתארח אצל חברים קרובים במנהטן. הנה כרטיס החזור המאושר שלי.",
-            "nextNodeId": "customs_baggage",
-            "feedbackHe": "אנגלית טבעית ומדויקת!",
-            "isOptimal": true
+            "textEn": "I am sleep in hotel somewhere in the center and go back maybe next month.",
+            "textHe": "אני ישן במלון איפשהו במרכז וחוזר אולי בחודש הבא.",
+            "nextNodeId": "step2_accommodation",
+            "feedbackHe": "✗ שגיאת דקדוק ותוכן! לא אומרים 'I am sleep' אלא 'I am staying', ותשובה מעורפלת ללא כרטיס חזור תעורר חשד בביקורת הגבולות.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Yes, the hotel has a very big swimming pool and free breakfast.",
+            "textHe": "כן, למלון יש בריכת שחייה גדולה מאוד וארוחת בוקר חינם.",
+            "nextNodeId": "step2_accommodation",
+            "feedbackHe": "✗ לא ענית לשאלה! הקצין ביקש לדעת את שם/כתובת מקום השהות ואישור על כרטיס חזור.",
+            "isOptimal": false
           }
         ]
       },
       {
-        "id": "business_check",
+        "id": "step3_occupation",
         "speakerName": "Border Officer",
-        "speakerLineEn": "Which company are you representing, and where is the conference taking place?",
-        "speakerLineHe": "איזו חברה אתה מייצג, והיכן מתקיים הכנס?",
+        "speakerLineEn": "What do you do for a living back home, and how much funds do you have available for this trip?",
+        "speakerLineHe": "במה אתה עוסק לפרנסתך בארץ המוצא, וכמה כסף זמין יש לך עבור הטיול הזה?",
         "options": [
           {
-            "textEn": "I work as a software developer, and the conference is held at the Convention Center downtown.",
-            "textHe": "אני עובד כמפתח תוכנה, והכנס מתקיים במרכז הכנסים במרכז העיר.",
-            "nextNodeId": "customs_baggage",
-            "feedbackHe": "תשובה מקצועית ומרשימה!",
-            "isOptimal": true
-          }
-        ]
-      },
-      {
-        "id": "customs_baggage",
-        "speakerName": "Border Officer",
-        "speakerLineEn": "Are you carrying any commercial goods, fresh food, or more than ten thousand dollars in cash?",
-        "speakerLineHe": "האם אתה נושא סחורה מסחרית, מזון טרי, או יותר מעשרת אלפים דולר במזומן?",
-        "options": [
-          {
-            "textEn": "No, officer. I only have my personal belongings and a laptop in my backpack.",
-            "textHe": "לא, אדוני השוטר. יש לי רק את החפצים האישיים שלילפטופ בתיק הגב.",
-            "nextNodeId": "ending_success",
-            "feedbackHe": "מושלם! הביטוי personal belongings שימושי מאוד בשדות תעופה.",
+            "textEn": "I work in software development, and I brought an international credit card along with five hundred dollars in cash.",
+            "textHe": "אני עובד בפיתוח תוכנה, והבאתי כרטיס אשראי בינלאומי יחד עם חמש מאות דולר במזומן.",
+            "nextNodeId": "step4_customs",
+            "feedbackHe": "✓ מושלם! הבנת שהביטוי 'What do you do for a living' שואל על המקצוע שלך.",
             "isOptimal": true
           },
           {
-            "textEn": "Nothing to declare, just clothes and some small souvenirs for my friends.",
-            "textHe": "אין לי על מה להצהיר, רק בגדים וכמה מזכרות קטנות לחברים.",
-            "nextNodeId": "ending_success",
-            "feedbackHe": "שימוש מצוין בביטוי המכס הנפוץ 'Nothing to declare'.",
-            "isOptimal": true
+            "textEn": "I live in an apartment on the third floor with my family.",
+            "textHe": "אני גר בדירה בקומה השלישית עם המשפחה שלי.",
+            "nextNodeId": "step3_occupation",
+            "feedbackHe": "✗ מלכודת קלאסית! 'What do you do for a living' פירושו 'במה אתה עובד לפרנסתך', ולא 'איפה אתה גר'.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "I am working as developer since three years ago and have many moneys.",
+            "textHe": "אני עובד כמפתח מלפני שלוש שנים ויש לי הרבה כספים.",
+            "nextNodeId": "step3_occupation",
+            "feedbackHe": "✗ שגיאת דקדוק כפולה! המילה money אינה ספירה (לא אומרים moneys), ועבור פעולה שנמשכת מהעבר משתמשים ב-'I have been working for three years'.",
+            "isOptimal": false
           }
         ]
       },
       {
-        "id": "ending_success",
-        "speakerName": "Border Officer",
-        "speakerLineEn": "Everything looks in order. Here is your stamped passport. Enjoy your stay!",
-        "speakerLineHe": "הכל נראה תקין. הנה הדרכון החתום שלך. תהנה מהשהות!",
+        "id": "step4_customs",
+        "speakerName": "Customs Agent",
+        "speakerLineEn": "Welcome to customs inspection. Are you carrying any fresh fruit, meat products, or commercial merchandise in your luggage?",
+        "speakerLineHe": "ברוך הבא לבדיקת המכס. האם אתה נושא פירות טריים, מוצרי בשר או סחורה מסחרית במזוודה שלך?",
+        "options": [
+          {
+            "textEn": "No, I have nothing to declare—only my personal clothes, toiletries, and a laptop.",
+            "textHe": "לא, אין לי על מה להצהיר — רק הבגדים האישיים שלי, כלי רחצה ולפטופ.",
+            "nextNodeId": "step5_lost_baggage",
+            "feedbackHe": "✓ מדויק! 'Nothing to declare' ו-'toiletries' (כלי רחצה) הם אוצר מילים מצוין.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "No, I don't have nothing inside my bag except clothes.",
+            "textHe": "לא, אין לי כלום בתוך התיק שלי חוץ מבגדים.",
+            "nextNodeId": "step4_customs",
+            "feedbackHe": "✗ שגיאת שלילה כפולה (Double Negative)! באנגלית תקנית לא אומרים 'I don't have nothing' אלא 'I don't have anything' או 'I have nothing'.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Yes, my suitcase is black and has four wheels.",
+            "textHe": "כן, המזוודה שלי שחורה ויש לה ארבעה גלגלים.",
+            "nextNodeId": "step4_customs",
+            "feedbackHe": "✗ תשובה שגויה! סוכן המכס שאל על תכולת המזוודה (פירות/בשר/סחורה), לא איך היא נראית.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "step5_lost_baggage",
+        "speakerName": "Baggage Desk Agent",
+        "speakerLineEn": "Hello sir, you look concerned by the carousel. Did your checked suitcase not come out on conveyor belt 4?",
+        "speakerLineHe": "שלום אדוני, אתה נראה מודאג ליד המסוע. האם המזוודה שמסרת לבטן המטוס לא יצאה במסוע מספר 4?",
+        "options": [
+          {
+            "textEn": "Yes, all the other bags have arrived, but mine is still missing. Here is my baggage claim tag.",
+            "textHe": "כן, כל שאר המזוודות הגיעו, אבל שלי עדיין חסרה. הנה מדבקת מעקב הכבודה שלי.",
+            "nextNodeId": "step6_baggage_delivery",
+            "feedbackHe": "✓ כל הכבוד! 'Baggage claim tag' הוא המונח המדויק למדבקת המזוודה.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "My luggage is losted and I want you find it now immediately.",
+            "textHe": "המזוודה שלי אבודה ואני רוצה שתמצא אותה עכשיו מיד.",
+            "nextNodeId": "step5_lost_baggage",
+            "feedbackHe": "✗ שגיאת דקדוק! הפועל lose הוא יוצא דופן—אומרים 'lost' ולא 'losted', ואומרים 'I want you to find it'.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "I would like to check in two suitcases for my flight tomorrow.",
+            "textHe": "הייתי רוצה למסור שתי מזוודות לטיסה שלי מחר.",
+            "nextNodeId": "step5_lost_baggage",
+            "feedbackHe": "✗ אי הבנת הסיטואציה! אתה כבר נחתת ומחפש מזוודה שלא הגיעה למסוע.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "step6_baggage_delivery",
+        "speakerName": "Baggage Desk Agent",
+        "speakerLineEn": "I just scanned your tag—good news! Your bag was placed on an earlier oversize cart and is waiting right behind Gate B. Need directions to the taxi stand?",
+        "speakerLineHe": "סרקתי כעת את המדבקה שלך — חדשות טובות! המזוודה שלך הונחה על עגלה מוקדמת יותר ומחכה ממש מאחורי שער B. צריך הכוונה לתחנת המוניות?",
+        "options": [
+          {
+            "textEn": "What a relief! Yes, please—which exit leads to the official metered taxis?",
+            "textHe": "איזו הקלה! כן בבקשה — איזו יציאה מובילה למוניות הרשמיות עם מונה?",
+            "nextNodeId": "ending_airport",
+            "feedbackHe": "✓ מושלם! 'What a relief' (איזו הקלה) ו-'metered taxis' (מוניות עם מונה) הם ביטויים שימושיים ביותר.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "Thank you, I am very angry that you found my bag so fast.",
+            "textHe": "תודה, אני מאוד כועס שמצאתם את התיק שלי כל כך מהר.",
+            "nextNodeId": "step6_baggage_delivery",
+            "feedbackHe": "✗ טעות באוצר מילים! angry פירושו כועס—התכוונת ל-glad / relieved (שמח / מוקל).",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Where I can to take a taxi to the city?",
+            "textHe": "איפה אני יכול לקחת מונית לעיר?",
+            "nextNodeId": "step6_baggage_delivery",
+            "feedbackHe": "✗ שגיאת תחביר נפוצה! בשאלה הופכים את הסדר ל-'Where can I', ואחרי can לעולם לא שמים to ('Where can I take').",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "ending_airport",
+        "speakerName": "Baggage Desk Agent",
+        "speakerLineEn": "Just follow the yellow signs through Exit 3. Have a fantastic trip in the city!",
+        "speakerLineHe": "פשוט עקוב אחר השלטים הצהובים דרך יציאה 3. שיהיה לך טיול נפלא בעיר!",
         "isEnding": true,
         "options": []
       }
     ]
   },
   {
-    "id": "restaurant_fine_dining",
+    "id": "restaurant_full_evening",
     "categoryHe": "אוכל ומסעדות",
-    "titleHe": "הזמנת ארוחה ושינוי מנות במסעדה",
-    "titleEn": "Ordering & Customizing at a Restaurant",
-    "difficultyHe": "קל-בינוני",
+    "titleHe": "ערב שלם במסעדה: שולחן, אלרגיות, מנה שגויה וחשבון",
+    "titleEn": "Full Restaurant Experience & Fixing an Order",
+    "difficultyHe": "בינוני",
     "nodes": [
       {
         "id": "start",
-        "speakerName": "Waiter",
-        "speakerLineEn": "Welcome! Do you have a reservation, or would you like a table for two?",
-        "speakerLineHe": "ברוכים הבאים! האם יש לכם הזמנה, או שתרצו שולחן לשניים?",
+        "speakerName": "Hostess",
+        "speakerLineEn": "Good evening! Welcome to La Bella Vista. Do you have a reservation with us tonight?",
+        "speakerLineHe": "ערב טוב! ברוכים הבאים ל'לה בלה ויסטה'. האם יש לכם הזמנה אצלנו להערב?",
         "options": [
           {
-            "textEn": "We don't have a reservation. Could we get a quiet table by the window, please?",
-            "textHe": "אין לנו הזמנה. האם נוכל לקבל שולחן שקט ליד החלון בבקשה?",
-            "nextNodeId": "drinks_order",
-            "feedbackHe": "ניסוח מנומס וטבעי מאוד!",
+            "textEn": "We didn't book in advance. Do you happen to have a table for two available outdoors?",
+            "textHe": "לא הזמנו מראש. האם במקרה יש לכם שולחן פנוי לשניים בחוץ?",
+            "nextNodeId": "step2_appetizers",
+            "feedbackHe": "✓ אנגלית טבעית ומנומסת מאוד! 'In advance' = מראש.",
             "isOptimal": true
           },
           {
-            "textEn": "Yes, I booked a table for two under the name David for 8 PM.",
-            "textHe": "כן, הזמנתי שולחן לשניים על השם דוד לשעה 20:00.",
-            "nextNodeId": "drinks_order",
-            "feedbackHe": "מצוין! 'Under the name...' הוא הביטוי המדויק להזמנת שולחן.",
-            "isOptimal": true
+            "textEn": "No order. Give us two chairs outside please.",
+            "textHe": "אין הזמנה. תני לנו שני כיסאות בחוץ בבקשה.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ שגיאת מינוח! הזמנת מקום במסעדה או במלון נקראת 'reservation' או 'booking', בעוד ש-'order' היא הזמנת האוכל עצמו מהתפריט.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Yes, we want to pay the bill now please.",
+            "textHe": "כן, אנחנו רוצים לשלם את החשבון עכשיו בבקשה.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ לא הגיוני! רק הרגע נכנסת למסעדה והמארחת שואלת אם הזמנתם שולחן.",
+            "isOptimal": false
           }
         ]
       },
       {
-        "id": "drinks_order",
+        "id": "step2_appetizers",
         "speakerName": "Waiter",
-        "speakerLineEn": "Right this way. Here are your menus. Can I start you off with something to drink?",
-        "speakerLineHe": "בבקשה בכיוון הזה. הנה התפריטים שלכם. אפשר להתחיל איתכם עם משהו לשתות?",
+        "speakerLineEn": "Here are your menus. Tonight's chef special is roasted sea bass. Would you like to start with drinks or an appetizer?",
+        "speakerLineHe": "הנה התפריטים שלכם. מנת הספיישל של השף הערב היא לברק צלוי. תרצו להתחיל עם שתייה או מנה ראשונה?",
         "options": [
           {
-            "textEn": "Could we have a bottle of sparkling water and two fresh lemonades, please?",
-            "textHe": "אפשר לקבל בקבוק מים מוגזים ושתי לימונדות טריות בבקשה?",
-            "nextNodeId": "main_course",
-            "feedbackHe": "מעולה! Sparkling water = מים מוגזים.",
+            "textEn": "Could we get a pitcher of cold water and the garlic bruschetta as a starter, please?",
+            "textHe": "אפשר לקבל קנקן מים קרים ואת ברוסקטת השום כמנה ראשונה בבקשה?",
+            "nextNodeId": "step3_main_allergy",
+            "feedbackHe": "✓ מעולה! 'Pitcher' = קנקן, ו-'starter' / 'appetizer' = מנה ראשונה.",
             "isOptimal": true
           },
           {
-            "textEn": "Just tap water with lemon for now while we look over the menu.",
-            "textHe": "רק מי ברז עם לימון כרגע בזמן שאנחנו מעיינים בתפריט.",
-            "nextNodeId": "main_course",
-            "feedbackHe": "יפה מאוד! Tap water = מי ברז.",
-            "isOptimal": true
+            "textEn": "We want to drink a soup and eat two waters.",
+            "textHe": "אנחנו רוצים לשתות מרק ולאכול שני מים.",
+            "nextNodeId": "step2_appetizers",
+            "feedbackHe": "✗ שגיאה! באנגלית מרק 'אוכלים' (eat/have soup) ולא 'שותים', ומים מבקשים כ-'two glasses of water'.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Bring me the first food on the paper.",
+            "textHe": "תביא לי את האוכל הראשון שעל הנייר.",
+            "nextNodeId": "step2_appetizers",
+            "feedbackHe": "✗ תרגום מילולי שגוי! 'מנה ראשונה' באנגלית היא 'starter' או 'appetizer' (ולא first food), ותפריט הוא 'menu'.",
+            "isOptimal": false
           }
         ]
       },
       {
-        "id": "main_course",
+        "id": "step3_main_allergy",
         "speakerName": "Waiter",
-        "speakerLineEn": "Are you ready to order your main course, or do you have any dietary restrictions?",
-        "speakerLineHe": "האם אתם מוכנים להזמין מנה עיקרית, או שיש לכם רגישויות/הגבלות תזונתיות?",
+        "speakerLineEn": "Great choice. Are you ready to order your main courses, and should the kitchen be aware of any food allergies?",
+        "speakerLineHe": "בחירה מצוינת. האם אתם מוכנים להזמין מנות עיקריות, והאם המטבח צריך להיות מודע לאלרגיות כלשהן למזון?",
         "options": [
           {
-            "textEn": "I'd like the grilled salmon, but could you serve the sauce on the side?",
-            "textHe": "אשמח לסלמון בגריל, אבל האם תוכלו להגיש את הרוטב בצד?",
-            "nextNodeId": "bill_request",
-            "feedbackHe": "אלוף! 'On the side' הוא ביטוי חיוני במסעדות.",
+            "textEn": "I'll have the ribeye steak cooked medium-well, and please make sure there are no peanuts in the sauce.",
+            "textHe": "אני אקח את סטייק האנטריקוט עשוי מדיום-וול, ואנא ודאו שאין בוטנים ברוטב.",
+            "nextNodeId": "step4_wrong_dish",
+            "feedbackHe": "✓ מצוין! כשמזמינים מנה במסעדה אומרים 'I'll have...' (ולא 'I will take').",
             "isOptimal": true
           },
           {
-            "textEn": "What do you recommend? I prefer something vegetarian and not too spicy.",
-            "textHe": "על מה אתה ממליץ? אני מעדיף משהו צמחוני ולא חריף מדי.",
-            "nextNodeId": "bill_request",
-            "feedbackHe": "שאלה מצוינת שמראה שליטה גבוהה בשיחה!",
-            "isOptimal": true
+            "textEn": "I am very allergic for nuts, so don't put it.",
+            "textHe": "אני מאוד אלרגי בשביל אגוזים, אז אל תשים את זה.",
+            "nextNodeId": "step3_main_allergy",
+            "feedbackHe": "✗ שגיאת מילת יחס! באנגלית אומרים 'allergic TO nuts' (ולא allergic for), ואגוזים ברבים מקבלים 'them' ולא 'it'.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Yes, I like allergies very much on my pasta.",
+            "textHe": "כן, אני אוהב אלרגיות מאוד על הפסטה שלי.",
+            "nextNodeId": "step3_main_allergy",
+            "feedbackHe": "✗ טעות בהבנת המילה! Allergies פירושו אלרגיות רפואיות, לא תוספות למנה.",
+            "isOptimal": false
           }
         ]
       },
       {
-        "id": "bill_request",
+        "id": "step4_wrong_dish",
         "speakerName": "Waiter",
-        "speakerLineEn": "I hope you enjoyed your meal! Would you care for any dessert or coffee?",
-        "speakerLineHe": "אני מקווה שנהניתם מהארוחה! תרצו קינוח או קפה?",
+        "speakerLineEn": "Here is your order: one chicken pasta and mashed potatoes. Enjoy your meal!",
+        "speakerLineHe": "הנה ההזמנה שלכם: פסטה עם עוף ופירה תפוחי אדמה. בתיאבון!",
         "options": [
           {
-            "textEn": "Everything was delicious, thank you. Could we just have the check, please?",
-            "textHe": "הכל היה טעים מאוד, תודה. אפשר רק לקבל את החשבון בבקשה?",
+            "textEn": "Excuse me, I think there's been a mix-up—I ordered the medium-well ribeye steak, not the chicken pasta.",
+            "textHe": "סליחה, אני חושב שחלה טעות (בלבול) — הזמנתי את סטייק האנטריקוט מדיום-וול, לא את פסטת העוף.",
+            "nextNodeId": "step5_check_split",
+            "feedbackHe": "✓ אלוף! 'There's been a mix-up' היא דרך מנומסת ואלגנטית מאוד להעיר על טעות בהזמנה.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "You are liar! Why you bring me chicken?!",
+            "textHe": "אתה שקרן! למה אתה מביא לי עוף?!",
+            "nextNodeId": "step4_wrong_dish",
+            "feedbackHe": "✗ גם תוקפני וגם שגוי דקדוקית ('Why did you bring me'). במסעדות בחו״ל פונים בנימוס: 'Excuse me, I think there is a mistake'.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Thank you, the steak looks medium-well.",
+            "textHe": "תודה, הסטייק נראה מדיום-וול.",
+            "nextNodeId": "step4_wrong_dish",
+            "feedbackHe": "✗ שים לב מה המלצר הגיש! הוא הגיש לך בטעות פסטה עם עוף במקום הסטייק שהזמנת.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "step5_check_split",
+        "speakerName": "Waiter",
+        "speakerLineEn": "I apologize again for the earlier mix-up—the dessert is on the house! How would you like to handle the check?",
+        "speakerLineHe": "אני מתנצל שוב על הבלבול מקודם — הקינוח הוא על חשבון הבית! איך תרצו לטפל בחשבון?",
+        "options": [
+          {
+            "textEn": "That's very kind of you! Could we split the bill evenly between two credit cards?",
+            "textHe": "זה מאוד אדיב מצדך! האם נוכל לפצל את החשבון שווה בשווה בין שני כרטיסי אשראי?",
             "nextNodeId": "ending_restaurant",
-            "feedbackHe": "מושלם! 'Could we have the check' היא הדרך המנומסת לבקש חשבון.",
+            "feedbackHe": "✓ מושלם! 'On the house' = על חשבון הבית, ו-'split the bill' = לפצל את החשבון.",
             "isOptimal": true
+          },
+          {
+            "textEn": "We don't want to buy your house, just give us the paper.",
+            "textHe": "אנחנו לא רוצים לקנות את הבית שלך, רק תן לנו את הנייר.",
+            "nextNodeId": "step5_check_split",
+            "feedbackHe": "✗ אי הבנת ניב (Idiom)! הביטוי 'On the house' פירושו 'בחינם / על חשבון המסעדה', אין קשר לקניית בית.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Cut the account to two halves please.",
+            "textHe": "תחתוך את החשבון לשני חצאים בבקשה.",
+            "nextNodeId": "step5_check_split",
+            "feedbackHe": "✗ תרגום מילולי שגוי! חשבון במסעדה הוא 'bill' או 'check' (כש-'account' הוא חשבון בנק/משתמש), ולפצל אומרים 'split the bill'.",
+            "isOptimal": false
           }
         ]
       },
       {
         "id": "ending_restaurant",
         "speakerName": "Waiter",
-        "speakerLineEn": "Certainly! I'll bring the terminal right over. Have a wonderful evening!",
-        "speakerLineHe": "בוודאי! אביא את מסוף התשלום מיד. שיהיה לכם ערב נפלא!",
+        "speakerLineEn": "Of course, I've split it down the middle for you. Thank you for dining with us, and have a lovely night!",
+        "speakerLineHe": "כמובן, פיצלתי אותו בדיוק באמצע עבורכם. תודה שסעדתם אצלנו, ושיהיה לילה נפלא!",
         "isEnding": true,
         "options": []
       }
     ]
   },
   {
-    "id": "tech_job_interview",
+    "id": "tech_interview_deep_dive",
     "categoryHe": "קריירה והייטק",
-    "titleHe": "ראיון עבודה למשרת פיתוח תוכנה",
-    "titleEn": "Software Developer Job Interview",
+    "titleHe": "ראיון עבודה מעמיק בהייטק: ארכיטקטורה, באגים ותנאי שכר",
+    "titleEn": "In-Depth Software Engineering Interview",
     "difficultyHe": "מתקדם",
     "nodes": [
       {
         "id": "start",
-        "speakerName": "Hiring Manager",
-        "speakerLineEn": "Thanks for joining us today. To kick things off, could you tell me a bit about your background in software development?",
-        "speakerLineHe": "תודה שהצטרפת אלינו היום. כדי להתחיל, תוכל לספר לי קצת על הרקע שלך בפיתוח תוכנה?",
+        "speakerName": "Lead Architect",
+        "speakerLineEn": "Welcome! Let's jump right in. Tell me about a complex project you built from scratch and the tech stack you chose.",
+        "speakerLineHe": "ברוך הבא! בוא נצלול מיד לעניינים. ספר לי על פרויקט מורכב שבנית מאפס ועל הטכנולוגיות שבחרת.",
         "options": [
           {
-            "textEn": "Sure! I specialize in Android development with Kotlin and C++, focusing on performance and clean architecture.",
-            "textHe": "בשמחה! אני מתמחה בפיתוח אנדרואיד עם Kotlin ו-C++, עם דגש על ביצועים וארכיטקטורה נקייה.",
-            "nextNodeId": "challenge_question",
-            "feedbackHe": "פתיחה מקצועית וחזקה מאוד!",
+            "textEn": "I developed a native Android app in Kotlin with Jetpack Compose, backed by an automated GitHub Actions build pipeline.",
+            "textHe": "פיתחתי אפליקציית אנדרואיד נייטיב ב-Kotlin עם Jetpack Compose, המגובה בצנרת בנייה אוטומטית ב-GitHub Actions.",
+            "nextNodeId": "step2_memory_bug",
+            "feedbackHe": "✓ פתיחה מקצועית וחדות טכנית גבוהה!",
             "isOptimal": true
           },
           {
-            "textEn": "I have built several mobile applications and automated CI/CD pipelines using GitHub Actions.",
-            "textHe": "בניתי מספר אפליקציות מובייל ותהליכי אוטומציה (CI/CD) באמצעות GitHub Actions.",
-            "nextNodeId": "challenge_question",
-            "feedbackHe": "תשובה מעולה שמדגישה ניסיון מעשי.",
-            "isOptimal": true
+            "textEn": "I builded a very good application in the last year with many codes.",
+            "textHe": "אני בניתי אפליקציה טובה מאוד בשנה שעברה עם הרבה קודים.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ שתי שגיאות בולטות: צורת העבר של build היא 'built' (ולא builded), והמילה code במשמעות קוד תוכנה אינה ספירה (אומרים 'a lot of code' ולא 'many codes').",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Yes, I like computers since I was a small child.",
+            "textHe": "כן, אני אוהב מחשבים מאז שהייתי ילד קטן.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ תשובה כללית מדי שלא עונה על השאלה המקצועית לגבי פרויקט שבנית וה-Tech Stack שלו.",
+            "isOptimal": false
           }
         ]
       },
       {
-        "id": "challenge_question",
-        "speakerName": "Hiring Manager",
-        "speakerLineEn": "Impressive. Can you describe a tough technical bug you encountered recently and how you resolved it?",
-        "speakerLineHe": "מרשים. האם תוכל לתאר באג טכני מורכב שנתקלת בו לאחרונה וכיצד פתרת אותו?",
+        "id": "step2_memory_bug",
+        "speakerName": "Lead Architect",
+        "speakerLineEn": "Nice! Suppose users report that the app occasionally freezes or crashes during rapid swipe gestures. How would you diagnose and fix it?",
+        "speakerLineHe": "יפה! נניח שמשתמשים מדווחים שהאפליקציה קופאת או קורסת לעיתים בזמן החלקות מהירות. איך היית מאבחן ומתקן זאת?",
         "options": [
           {
-            "textEn": "We had a race condition in our audio engine. I analyzed the thread lifecycle and synchronized state updates.",
-            "textHe": "היה לנו Race Condition במנוע האודיו. ניתחתי את מחזור החיים של ה-Threads וסינכרנתי את עדכוני המצב.",
-            "nextNodeId": "teamwork_question",
-            "feedbackHe": "תשובה טכנית מדויקת ברמה של מפתח בכיר!",
+            "textEn": "I'd check for concurrent coroutine collisions on shared animation states and move heavy I/O parsing off the main thread.",
+            "textHe": "הייתי בודק התנגשויות של קורוטינות מקבילות על מצבי אנימציה משותפים, ומעביר פענוח קבצים כבד אל מחוץ ל-Main Thread.",
+            "nextNodeId": "step3_apk_size",
+            "feedbackHe": "✓ תשובה מבריקה שמראה הבנה מעמיקה של Concurrency ו-Main Thread!",
             "isOptimal": true
           },
           {
-            "textEn": "I reduced our APK size by over 50% by replacing heavy icon libraries with custom vector canvas drawings.",
-            "textHe": "הקטנתי את גודל ה-APK ביותר מ-50% על ידי החלפת ספריות אייקונים כבדות בציורים וקטוריים מותאמים.",
-            "nextNodeId": "teamwork_question",
-            "feedbackHe": "דוגמה מעולה של אופטימיזציה אמיתית!",
-            "isOptimal": true
+            "textEn": "I will tell the users to swipe more slowly with their finger.",
+            "textHe": "אני אגיד למשתמשים להחליק יותר לאט עם האצבע שלהם.",
+            "nextNodeId": "step2_memory_bug",
+            "feedbackHe": "✗ בראיון פיתוח לא מאשימים את המשתמש בבאג של המערכת, אלא מציגים פתרון הנדסי.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "I would delete all the animations from the project.",
+            "textHe": "הייתי מוחק את כל האנימציות מהפרויקט.",
+            "nextNodeId": "step2_memory_bug",
+            "feedbackHe": "✗ מחיקת פיצ'ר במקום תיקון שורש הבעיה (Root Cause) נתפסת כחולשה בראיון טכני.",
+            "isOptimal": false
           }
         ]
       },
       {
-        "id": "teamwork_question",
-        "speakerName": "Hiring Manager",
-        "speakerLineEn": "That's great problem-solving. Do you have any questions for us about the role or our engineering culture?",
-        "speakerLineHe": "זה פתרון בעיות נהדר. האם יש לך שאלות אלינו לגבי התפקיד או תרבות הפיתוח שלנו?",
+        "id": "step3_apk_size",
+        "speakerName": "Lead Architect",
+        "speakerLineEn": "Spot on. Now, what strategies do you use to keep the APK size minimal without sacrificing visual quality?",
+        "speakerLineHe": "בול פגיעה. כעת, באילו אסטרטגיות אתה משתמש כדי לשמור על גודל APK מינימלי מבלי להתפשר על האיכות הוויזואלית?",
         "options": [
           {
-            "textEn": "Yes, how does the team handle code reviews, and what are the main goals for the next quarter?",
-            "textHe": "כן, איך הצוות מנהל סקירות קוד (Code Reviews), ומהן המטרות המרכזיות לרבעון הקרוב?",
+            "textEn": "I enable R8 code shrinking with strict ProGuard rules, filter unused locales, and draw custom vector icons instead of bundling bulky libraries.",
+            "textHe": "אני מפעיל כיווץ קוד R8 עם חוקי ProGuard מדויקים, מסנן שפות שאינן בשימוש, ומצייר אייקונים וקטוריים במקום לצרף ספריות כבדות.",
+            "nextNodeId": "step4_code_disagreement",
+            "feedbackHe": "✓ מעולה! תשובה מקצועית ומנומקת היטב.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "I zip the APK file twice before uploading it to the store.",
+            "textHe": "אני מכווץ ב-ZIP את קובץ ה-APK פעמיים לפני העלאתו לחנות.",
+            "nextNodeId": "step3_apk_size",
+            "feedbackHe": "✗ לא תקף טכנית: קובץ APK הוא כבר ארכיון דחוס, ודחיסתו החיצונית לא מקטינה את גודל ההתקנה במכשיר.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "I remove the AndroidManifest file to save space.",
+            "textHe": "אני מסיר את קובץ ה-AndroidManifest כדי לחסוך מקום.",
+            "nextNodeId": "step3_apk_size",
+            "feedbackHe": "✗ שגיאה קריטית: אי אפשר לבנות או להתקין אפליקציית אנדרואיד ללא AndroidManifest.xml.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "step4_code_disagreement",
+        "speakerName": "Lead Architect",
+        "speakerLineEn": "How do you handle a situation where a senior teammate disagrees with your implementation during a Pull Request review?",
+        "speakerLineHe": "איך אתה מתמודד עם מצב שבו חבר צוות בכיר חולק על המימוש שלך במהלך סקירת קוד (Pull Request)?",
+        "options": [
+          {
+            "textEn": "I welcome constructive feedback, benchmark both approaches objectively, and align on the most maintainable solution.",
+            "textHe": "אני מקבל בברכה משוב בונה, משווה ביצועים של שתי הגישות באופן אובייקטיבי, ומתיישר לפי הפתרון הנוח ביותר לתחזוקה.",
+            "nextNodeId": "step5_salary_expectations",
+            "feedbackHe": "✓ תשובה בוגרת ומרשימה! 'Constructive feedback' ו-'maintainable' הן מילות מפתח מצוינות.",
+            "isOptimal": true
+          },
+          {
+            "textEn": "I merge my code anyway when he goes home at night.",
+            "textHe": "אני ממזג את הקוד שלי בכל זאת כשהוא הולך הביתה בלילה.",
+            "nextNodeId": "step4_code_disagreement",
+            "feedbackHe": "✗ דגל אדום בראיון עבודה! עקיפת תהליך Code Review מעידה על חוסר שיתוף פעולה בצוות.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "I am never do mistakes in my code so he is wrong.",
+            "textHe": "אני אף פעם לא עושה טעויות בקוד שלי אז הוא טועה.",
+            "nextNodeId": "step4_code_disagreement",
+            "feedbackHe": "✗ שתי שגיאות דקדוק ('I never make mistakes', לא 'am do mistakes') וגישה לא מקצועית.",
+            "isOptimal": false
+          }
+        ]
+      },
+      {
+        "id": "step5_salary_expectations",
+        "speakerName": "HR Director",
+        "speakerLineEn": "The technical team loved talking with you! Before we wrap up, when would you be available to start, and what are your expectations regarding the role?",
+        "speakerLineHe": "הצוות הטכני מאוד נהנה לשוחח איתך! לפני שנסיים, מתי תהיה זמין להתחיל, ומהן הציפיות שלך לגבי התפקיד?",
+        "options": [
+          {
+            "textEn": "I can start after a standard two-week notice period, and I'm looking for a role where I can take ownership of core features.",
+            "textHe": "אוכל להתחיל לאחר תקופת הודעה מוקדמת סטנדרטית של שבועיים, ואני מחפש תפקיד שבו אוכל לקחת אחריות מלאה על פיצ'רים מרכזיים.",
             "nextNodeId": "ending_interview",
-            "feedbackHe": "שאלה חכמה שמראה עניין אמיתי בעבודת הצוות!",
+            "feedbackHe": "✓ סיום מושלם לראיון! 'Notice period' (הודעה מוקדמת) ו-'take ownership' הם ביטויים חזקים מאוד.",
             "isOptimal": true
+          },
+          {
+            "textEn": "I want you to pay me million dollars and I work two hours a week.",
+            "textHe": "אני רוצה שתשלמו לי מיליון דולר ואני אעבוד שעתיים בשבוע.",
+            "nextNodeId": "step5_salary_expectations",
+            "feedbackHe": "✗ תשובה לא רצינית שתפסול את המועמדות בשלב משאבי האנוש.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "I don't know what this company is doing.",
+            "textHe": "אני לא יודע מה החברה הזאת עושה.",
+            "nextNodeId": "step5_salary_expectations",
+            "feedbackHe": "✗ חוסר היכרות עם החברה בשלב הסופי של הראיון משדר חוסר רצינות.",
+            "isOptimal": false
           }
         ]
       },
       {
         "id": "ending_interview",
-        "speakerName": "Hiring Manager",
-        "speakerLineEn": "Great questions! We were very impressed today and will be in touch with next steps soon.",
-        "speakerLineHe": "שאלות מצוינות! התרשמנו מאוד היום ונהיה בקשר לגבי השלבים הבאים בקרוב.",
+        "speakerName": "HR Director",
+        "speakerLineEn": "Fantastic! We will send over our formal offer letter by tomorrow afternoon. Welcome aboard!",
+        "speakerLineHe": "פנטסטי! נשלח אליך את מכתב ההצעה הרשמי עד מחר בצהריים. ברוך הבא לצוות!",
         "isEnding": true,
         "options": []
       }
     ]
   },
   {
-    "id": "hotel_check_in_issue",
+    "id": "hotel_crisis_resolution",
     "categoryHe": "טיסות וחו״ל",
-    "titleHe": "צ׳ק-אין במלון וטיפול בבעיה בחדר",
-    "titleEn": "Hotel Check-In & Room Upgrade",
-    "difficultyHe": "בינוני",
-    "nodes": [
-      {
-        "id": "start",
-        "speakerName": "Receptionist",
-        "speakerLineEn": "Good afternoon! Welcome to the Horizon Hotel. How may I assist you today?",
-        "speakerLineHe": "צהריים טובים! ברוך הבא למלון הורייזן. כיצד אוכל לסייע לך היום?",
-        "options": [
-          {
-            "textEn": "Hi, I'd like to check in, please. I have a reservation for three nights.",
-            "textHe": "היי, אשמח לעשות צ'ק-אין בבקשה. יש לי הזמנה לשלושה לילות.",
-            "nextNodeId": "room_problem",
-            "feedbackHe": "פתיחה חלקה ומדויקת!",
-            "isOptimal": true
-          }
-        ]
-      },
-      {
-        "id": "room_problem",
-        "speakerName": "Receptionist",
-        "speakerLineEn": "I found your booking, but our standard rooms on the upper floor are currently being renovated. Is a first-floor room okay?",
-        "speakerLineHe": "מצאתי את ההזמנה שלך, אבל החדרים הרגילים בקומה העליונה בשיפוצים כרגע. האם חדר בקומה הראשונה יתאים?",
-        "options": [
-          {
-            "textEn": "I'm a light sleeper and prefer a quiet room. Would a complimentary upgrade to a deluxe room be possible?",
-            "textHe": "יש לי שינה קלה ואני מעדיף חדר שקט. האם שדרוג ללא עלות לחדר דלוקס יהיה אפשרי?",
-            "nextNodeId": "breakfast_wifi",
-            "feedbackHe": "ניהול משא ומתן מנומס ומרשים מאוד באנגלית (Complimentary upgrade)!",
-            "isOptimal": true
-          },
-          {
-            "textEn": "As long as it faces the courtyard and not the main street, that works for me.",
-            "textHe": "כל עוד הוא פונה לחצר הפנימית ולא לרחוב הראשי, זה מתאים לי.",
-            "nextNodeId": "breakfast_wifi",
-            "feedbackHe": "תשובה עניינית וטבעית!",
-            "isOptimal": true
-          }
-        ]
-      },
-      {
-        "id": "breakfast_wifi",
-        "speakerName": "Receptionist",
-        "speakerLineEn": "I've arranged a quiet deluxe room on the top floor for you at no extra charge! Here is your key card.",
-        "speakerLineHe": "סידרתי לך חדר דלוקס שקט בקומה העליונה ללא תוספת תשלום! הנה כרטיס המפתח שלך.",
-        "options": [
-          {
-            "textEn": "Thank you so much! By the way, what time is breakfast served, and what is the Wi-Fi password?",
-            "textHe": "תודה רבה! דרך אגב, באיזו שעה מוגשת ארוחת הבוקר ומהי סיסמת ה-Wi-Fi?",
-            "nextNodeId": "ending_hotel",
-            "feedbackHe": "מצוין! שאלת את שתי השאלות הכי חשובות בכל מלון.",
-            "isOptimal": true
-          }
-        ]
-      },
-      {
-        "id": "ending_hotel",
-        "speakerName": "Receptionist",
-        "speakerLineEn": "Breakfast is from 7 to 10 AM in the lobby, and the Wi-Fi details are inside your key holder. Enjoy your stay!",
-        "speakerLineHe": "ארוחת הבוקר היא מ-7 עד 10 בלובי, ופרטי ה-Wi-Fi נמצאים בתוך מעטפת המפתח. שהות נעימה!",
-        "isEnding": true,
-        "options": []
-      }
-    ]
-  },
-  {
-    "id": "electronics_store_shopping",
-    "categoryHe": "קניות ושירותים",
-    "titleHe": "קניית אוזניות אלחוטיות והחזרת מס (Tax Free)",
-    "titleEn": "Buying Headphones & Tax-Free Refund",
-    "difficultyHe": "בינוני",
-    "nodes": [
-      {
-        "id": "start",
-        "speakerName": "Store Specialist",
-        "speakerLineEn": "Hey there! Looking for anything specific in our audio department today?",
-        "speakerLineHe": "היי! מחפש משהו ספציפי במחלקת האודיו שלנו היום?",
-        "options": [
-          {
-            "textEn": "Yes, I'm comparing wireless headphones with active noise cancellation and strong battery life.",
-            "textHe": "כן, אני משווה אוזניות אלחוטיות עם סינון רעשים אקטיבי וחיי סוללה חזקים.",
-            "nextNodeId": "testing_model",
-            "feedbackHe": "שימוש מצוין במונחים טכניים מדויקים!",
-            "isOptimal": true
-          }
-        ]
-      },
-      {
-        "id": "testing_model",
-        "speakerName": "Store Specialist",
-        "speakerLineEn": "This Pro model has multipoint Bluetooth and a custom equalizer app. Would you like to test the sound quality?",
-        "speakerLineHe": "לדגם ה-Pro הזה יש בלוטות' לחיבור כפול ואפליקציית אקוולייזר מותאמת. תרצה לבדוק את איכות הסאונד?",
-        "options": [
-          {
-            "textEn": "They sound great and fit comfortably. Do they come with an international warranty?",
-            "textHe": "הן נשמעות מעולה ויושבות בנוחות. האם הן מגיעות עם אחריות בינלאומית?",
-            "nextNodeId": "tax_free_checkout",
-            "feedbackHe": "שאלה חשובה ומדויקת מאוד לקניות בחו״ל!",
-            "isOptimal": true
-          }
-        ]
-      },
-      {
-        "id": "tax_free_checkout",
-        "speakerName": "Store Specialist",
-        "speakerLineEn": "Yes, a one-year global warranty is included. Will you be paying by credit card or cash?",
-        "speakerLineHe": "כן, אחריות עולמית לשנה כלולה. תשלם בכרטיס אשראי או במזומן?",
-        "options": [
-          {
-            "textEn": "I'll pay by credit card. Also, since I'm a tourist, could you issue a Tax-Free form for the airport?",
-            "textHe": "אשלם בכרטיס אשראי. בנוסף, מאחר שאני תייר, תוכל להנפיק לי טופס החזר מס לשדה התעופה?",
-            "nextNodeId": "ending_shopping",
-            "feedbackHe": "אנגלית מעשית ברמה גבוהה!",
-            "isOptimal": true
-          }
-        ]
-      },
-      {
-        "id": "ending_shopping",
-        "speakerName": "Store Specialist",
-        "speakerLineEn": "Of course! Here is your receipt and the stamped Tax-Free form. Enjoy your new headphones!",
-        "speakerLineHe": "כמובן! הנה הקבלה שלך וטופס החזר המס החתום. תתחדש על האוזניות!",
-        "isEnding": true,
-        "options": []
-      }
-    ]
-  },
-  {
-    "id": "doctor_clinic_visit",
-    "categoryHe": "חירום ובריאות",
-    "titleHe": "ביקור אצל רופא ובית מרקחת בחו״ל",
-    "titleEn": "Visiting a Doctor & Pharmacy Abroad",
+    "titleHe": "בעיות במלון: מזגן מקולקל, חיוב כפול והזמנת מונית שירות",
+    "titleEn": "Hotel Troubleshooting & Billing Dispute",
     "difficultyHe": "בינוני-מתקדם",
     "nodes": [
       {
         "id": "start",
-        "speakerName": "Doctor",
-        "speakerLineEn": "Hello, please have a seat. What seems to be the problem, and when did the symptoms start?",
-        "speakerLineHe": "שלום, שב בבקשה. מה הבעיה, ומתי התחילו התסמינים?",
+        "speakerName": "Front Desk Manager",
+        "speakerLineEn": "Front desk, good evening. How can I help you with your room tonight?",
+        "speakerLineHe": "קבלה, ערב טוב. כיצד אוכל לעזור לך עם החדר שלך הערב?",
         "options": [
           {
-            "textEn": "I've had a sore throat and a mild fever since yesterday evening, and I feel exhausted.",
-            "textHe": "יש לי כאב גרון וחום קל מאתמול בערב, ואני מרגיש מותש.",
-            "nextNodeId": "allergy_check",
-            "feedbackHe": "תיאור רפואי מדויק וברור!",
+            "textEn": "Hi, I'm calling from room 412. The air conditioner isn't cooling at all, and it's making a loud rattling noise.",
+            "textHe": "היי, אני מתקשר מחדר 412. המזגן בכלל לא מקרר, והוא משמיע רעש נקישה חזק.",
+            "nextNodeId": "step2_room_switch",
+            "feedbackHe": "✓ תיאור מדויק וברור של תקלה בחדר!",
             "isOptimal": true
+          },
+          {
+            "textEn": "The wind machine on the wall is dead and shouting.",
+            "textHe": "מכונת הרוח על הקיר מתה וצועקת.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ אוצר מילים שגוי! למזגן קוראים 'air conditioner' (או A/C), ולרעש מכני קוראים 'making a loud noise'.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Yes, I would like to wake up yesterday morning.",
+            "textHe": "כן, הייתי רוצה להתעורר אתמול בבוקר.",
+            "nextNodeId": "start",
+            "feedbackHe": "✗ משפט חסר היגיון (להתעורר אתמול בבוקר).",
+            "isOptimal": false
           }
         ]
       },
       {
-        "id": "allergy_check",
-        "speakerName": "Doctor",
-        "speakerLineEn": "Let me examine your throat. Are you allergic to any medications, such as penicillin?",
-        "speakerLineHe": "תן לי לבדוק את הגרון שלך. האם אתה אלרגי לתרופות כלשהן, כמו פניצילין?",
+        "id": "step2_room_switch",
+        "speakerName": "Front Desk Manager",
+        "speakerLineEn": "I'm terribly sorry about that. Our maintenance technician is off duty until morning. Would you like us to move you to another room right away?",
+        "speakerLineHe": "אני מצטער מאוד על כך. טכנאי התחזוקה שלנו לא במשמרת עד הבוקר. תרצה שנעביר אותך לחדר אחר מיד?",
         "options": [
           {
-            "textEn": "No, I don't have any known allergies to medications.",
-            "textHe": "לא, אין לי אלרגיות ידועות לתרופות.",
-            "nextNodeId": "prescription_instructions",
-            "feedbackHe": "תשובה חשובה ומדויקת ('known allergies').",
+            "textEn": "Yes, please. Could someone send the new key cards up and help us with our luggage?",
+            "textHe": "כן, בבקשה. האם מישהו יוכל לשלוח למעלה את כרטיסי המפתח החדשים ולעזור לנו עם המזוודות?",
+            "nextNodeId": "step3_minibar_dispute",
+            "feedbackHe": "✓ מנומס, מעשי ומדויק!",
             "isOptimal": true
+          },
+          {
+            "textEn": "No, I prefer to repair the air conditioner by myself with a hammer.",
+            "textHe": "לא, אני מעדיף לתקן את המזגן בעצמי עם פטיש.",
+            "nextNodeId": "step2_room_switch",
+            "feedbackHe": "✗ תשובה לא מציאותית בסיטואציה מול קבלת המלון.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Why the technician is sleeping in my bed?",
+            "textHe": "למה הטכנאי ישן במיטה שלי?",
+            "nextNodeId": "step2_room_switch",
+            "feedbackHe": "✗ אי הבנת הביטוי 'off duty' (שפירושו לא במשמרת / סיים את יום העבודה).",
+            "isOptimal": false
           }
         ]
       },
       {
-        "id": "prescription_instructions",
-        "speakerName": "Doctor",
-        "speakerLineEn": "It's a mild infection. I'm writing you a prescription. Make sure to drink plenty of fluids.",
-        "speakerLineHe": "זו דלקת קלה. אני רושם לך מרשם. הקפד לשתות הרבה נוזלים.",
+        "id": "step3_minibar_dispute",
+        "speakerName": "Front Desk Manager",
+        "speakerLineEn": "Good morning! As you're checking out today, here is your itemized invoice. Does everything look accurate?",
+        "speakerLineHe": "בוקר טוב! מאחר שאתה עושה צ'ק-אווט היום, הנה החשבונית המפורטת שלך. האם הכל נראה מדויק?",
         "options": [
           {
-            "textEn": "Thank you, doctor. How often should I take these pills, and should I take them with food?",
-            "textHe": "תודה דוקטור. כל כמה זמן עליי לקחת את הכדורים האלו, והאם לקחת אותם עם אוכל?",
-            "nextNodeId": "ending_clinic",
-            "feedbackHe": "מעולה! שאלה קריטית מול רופא או רוקח.",
+            "textEn": "Actually, I noticed a $45 charge for the minibar, but we didn't take anything from it. Could you remove that charge?",
+            "textHe": "למען האמת, שמתי לב לחיוב של 45 דולר על המיני-בר, אבל לא לקחנו ממנו כלום. תוכל להסיר את החיוב הזה?",
+            "nextNodeId": "step4_luggage_storage",
+            "feedbackHe": "✓ מצוין! 'Charge' = חיוב כספי, וביקשת לבטל אותו בצורה מנומסת וברורה.",
             "isOptimal": true
+          },
+          {
+            "textEn": "You stole my money for small refrigerator drinks!",
+            "textHe": "אתם גנבתם את הכסף שלי על משקאות מקרר קטן!",
+            "nextNodeId": "step3_minibar_dispute",
+            "feedbackHe": "✗ פנייה מאשימה ולא מנומסת. באנגלית עסקית/תיירותית מציגים טעות בחשבון באמצעות 'I noticed an extra charge on my bill'.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Yes, please charge me double price for everything.",
+            "textHe": "כן, בבקשה תחייב אותי מחיר כפול על הכל.",
+            "nextNodeId": "step3_minibar_dispute",
+            "feedbackHe": "✗ ביקשת שישלשו/יכפילו לך את המחיר במקום לתקן את החשבונית.",
+            "isOptimal": false
           }
         ]
       },
       {
-        "id": "ending_clinic",
-        "speakerName": "Doctor",
-        "speakerLineEn": "Take one tablet twice a day after meals for five days. Feel better soon!",
-        "speakerLineHe": "קח כדור אחד פעמיים ביום אחרי הארוחות למשך חמישה ימים. תרגיש טוב בקרוב!",
-        "isEnding": true,
-        "options": []
-      }
-    ]
-  },
-  {
-    "id": "public_transit_navigation",
-    "categoryHe": "תחבורה והתמצאות",
-    "titleHe": "ניווט ברכבת התחתית וקניית כרטיס נסיעה",
-    "titleEn": "Subway Navigation & Transit Pass",
-    "difficultyHe": "קל",
-    "nodes": [
-      {
-        "id": "start",
-        "speakerName": "Station Agent",
-        "speakerLineEn": "Next in line, please! How can I help you today?",
-        "speakerLineHe": "הבא בתור בבקשה! איך אוכל לעזור לך היום?",
+        "id": "step4_luggage_storage",
+        "speakerName": "Front Desk Manager",
+        "speakerLineEn": "My apologies, I've removed the minibar fee right away. Your flight isn't until tonight, right?",
+        "speakerLineHe": "התנצלותי, הסרתי את חיוב המיני-בר מיד. הטיסה שלך היא רק הערב, נכון?",
         "options": [
           {
-            "textEn": "Excuse me, what's the fastest way to get to the Science Museum from here?",
-            "textHe": "סליחה, מהי הדרך המהירה ביותר להגיע למוזיאון המדע מכאן?",
-            "nextNodeId": "line_transfer",
-            "feedbackHe": "ניסוח טבעי ומנומס להתמצאות בעיר!",
+            "textEn": "That's right. Is it possible to store our suitcases in the luggage room until 6 PM while we walk around?",
+            "textHe": "נכון. האם אפשר לאחסן את המזוודות שלנו בחדר המזוודות עד 18:00 בזמן שאנחנו מטיילים?",
+            "nextNodeId": "ending_hotel_crisis",
+            "feedbackHe": "✓ נהדר! 'Store our suitcases' היא הדרך הטבעית לבקש שמירת חפצים במלון.",
             "isOptimal": true
+          },
+          {
+            "textEn": "Can we throw our bags in the street until the evening?",
+            "textHe": "האם נוכל לזרוק את התיקים שלנו ברחוב עד הערב?",
+            "nextNodeId": "step4_luggage_storage",
+            "feedbackHe": "✗ טעות בפועל! 'Throw' פירושו להשליך/לזרוק, בעוד שלאחסן/לשמור אומרים 'store' או 'keep'.",
+            "isOptimal": false
+          },
+          {
+            "textEn": "Yes, my flight was three days ago.",
+            "textHe": "כן, הטיסה שלי הייתה לפני שלושה ימים.",
+            "nextNodeId": "step4_luggage_storage",
+            "feedbackHe": "✗ סתירה בזמנים: המנהל שאל על הטיסה שלך הערב (tonight), ולא בעבר.",
+            "isOptimal": false
           }
         ]
       },
       {
-        "id": "line_transfer",
-        "speakerName": "Station Agent",
-        "speakerLineEn": "Take the Blue Line northbound for three stops, then transfer to the Express Green Line.",
-        "speakerLineHe": "קח את הקו הכחול צפונה למשך שלוש תחנות, ואז החלף לקו הירוק המהיר.",
-        "options": [
-          {
-            "textEn": "Got it! Is it better to buy a single-ride ticket or a weekly unlimited pass?",
-            "textHe": "הבנתי! האם עדיף לקנות כרטיס לנסיעה בודדת או כרטיס חופשי-שבועי?",
-            "nextNodeId": "ending_transit",
-            "feedbackHe": "מצוין! Unlimited pass = חופשי תקופתי.",
-            "isOptimal": true
-          }
-        ]
-      },
-      {
-        "id": "ending_transit",
-        "speakerName": "Station Agent",
-        "speakerLineEn": "The 7-day unlimited pass saves you money after just six rides. Here is your card, platform 2 is downstairs!",
-        "speakerLineHe": "הכרטיס החופשי ל-7 ימים חוסך לך כסף כבר אחרי שש נסיעות. הנה הכרטיס שלך, רציף 2 נמצא למטה!",
-        "isEnding": true,
-        "options": []
-      }
-    ]
-  },
-  {
-    "id": "apartment_rental_viewing",
-    "categoryHe": "מגורים ונדל״ן",
-    "titleHe": "סיור בדירה להשכרה ובירור תנאי חוזה",
-    "titleEn": "Apartment Viewing & Lease Terms",
-    "difficultyHe": "מתקדם",
-    "nodes": [
-      {
-        "id": "start",
-        "speakerName": "Landlord",
-        "speakerLineEn": "Welcome! As you can see, the living room gets plenty of natural light. What do you think of the apartment so far?",
-        "speakerLineHe": "ברוך הבא! כפי שאתה רואה, הסלון מקבל המון אור טבעי. מה דעתך על הדירה עד כה?",
-        "options": [
-          {
-            "textEn": "It's very spacious! Are utilities like water, heating, and high-speed internet included in the monthly rent?",
-            "textHe": "היא מרווחת מאוד! האם חשבונות כמו מים, חימום ואינטרנט מהיר כלולים בשכר הדירה החודשי?",
-            "nextNodeId": "lease_deposit",
-            "feedbackHe": "מצוין! המילה Utilities משמשת לכל החשבונות השוטפים של הדירה.",
-            "isOptimal": true
-          }
-        ]
-      },
-      {
-        "id": "lease_deposit",
-        "speakerName": "Landlord",
-        "speakerLineEn": "Water and heating are included, while electricity and internet are separate. We require a one-year lease.",
-        "speakerLineHe": "מים וחימום כלולים, בעוד שחשמל ואינטרנט משולמים בנפרד. אנחנו דורשים חוזה לשנה.",
-        "options": [
-          {
-            "textEn": "How much is the security deposit, and when is the earliest move-in date?",
-            "textHe": "מה גובה הפיקדון (Security deposit), ומהו תאריך הכניסה המוקדם ביותר האפשרי?",
-            "nextNodeId": "ending_apartment",
-            "feedbackHe": "שאלה מקצועית ומדויקת!",
-            "isOptimal": true
-          }
-        ]
-      },
-      {
-        "id": "ending_apartment",
-        "speakerName": "Landlord",
-        "speakerLineEn": "The deposit is one month's rent, and you can move in on the first of next month. I'll email you the contract!",
-        "speakerLineHe": "הפיקדון הוא בגובה חודש שכירות אחד, ותוכל להיכנס בראשון לחודש הבא. אשלח לך את החוזה במייל!",
+        "id": "ending_hotel_crisis",
+        "speakerName": "Front Desk Manager",
+        "speakerLineEn": "Certainly! Here are your claim tickets for the luggage room. See you at 6 PM, and enjoy your last day in town!",
+        "speakerLineHe": "בוודאי! הנה פתקי השמירה לחדר המזוודות. נתראה ב-18:00, ותהנו מהיום האחרון שלכם בעיר!",
         "isEnding": true,
         "options": []
       }
