@@ -11,17 +11,22 @@ android {
         applicationId = "com.example.englishtutor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 3
-        versionName = "3.0"
+        versionCode = 4
+        versionName = "4.0"
 
+        // שומר אך ורק משאבים בעברית ובאנגלית להקטנת הקובץ
         resourceConfigurations += listOf("en", "iw", "he")
     }
 
     buildTypes {
         debug {
-            // מונע קריסות של R8 עם Jetpack Compose בגרסת ה-APK של גיטהאב
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // החזרת דחיסת קוד ומשאבים מלאה עבור ה-APK שנבנה בגיטהאב
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
         release {
             isMinifyEnabled = true
@@ -49,6 +54,8 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "META-INF/*.version"
+            excludes += "DebugProbesKt.bin"
+            excludes += "kotlin-tooling-metadata.json"
         }
     }
 }
