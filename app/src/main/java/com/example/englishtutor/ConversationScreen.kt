@@ -1,13 +1,8 @@
 package com.example.englishtutor
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,7 +41,6 @@ import kotlin.math.roundToInt
 
 val ErrorCrimson = Color(0xFFFF4D6D)
 
-// מחלקת עזר ששומרת אפשרויות שנוצרו ב-AI ללא צורך בסוגריים זוויתיים מקוננים
 class AiOptionsStore {
     private val map = HashMap<String, MutableList<DialogueOption>>()
 
@@ -75,15 +69,12 @@ fun ConversationScreen(
     var currentNodeId by remember { mutableStateOf("start") }
     var stepNumber by remember { mutableIntStateOf(1) }
 
-    // זרע ערבוב שמשתנה בכל שלב, בכל אתחול ובכל טעות כדי שהתשובות יתערבבו מחדש!
     var shuffleSeed by remember { mutableIntStateOf(0) }
 
-    // מאגר תשובות שנוספו על ידי ה-AI
     val aiStore = remember { AiOptionsStore() }
     var aiStoreVersion by remember { mutableIntStateOf(0) }
     var isGeneratingMoreOptions by remember { mutableStateOf(false) }
 
-    // דיאלוג יצירת שיחה חדשה ב-AI
     var showAiGeneratorDialog by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var aiTopicInput by remember { mutableStateOf("") }
@@ -95,6 +86,7 @@ fun ConversationScreen(
     var scorePoints by remember { mutableIntStateOf(0) }
     var wrongTextsInCurrentNode by remember { mutableStateOf(emptySet<String>()) }
 
+    // מצב תרגום לעברית - עובד מיד בלחיצה על הכפתור או על בועת הטקסט
     var showHebrewTranslation by remember { mutableStateOf(false) }
     var lastFeedback by remember { mutableStateOf("") }
     var lastChoiceOptimal by remember { mutableStateOf(true) }
@@ -212,7 +204,6 @@ fun ConversationScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             if (activeScenario == null) {
-                // --- כפתור יצירת שיחה חדשה באמצעות מודל AI מקוון ---
                 Button(
                     onClick = {
                         aiStatusMessage = ""
@@ -237,7 +228,6 @@ fun ConversationScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // סרגל קטגוריות
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
@@ -270,7 +260,6 @@ fun ConversationScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // רשימת תרחישי השיחה
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier
@@ -375,7 +364,6 @@ fun ConversationScreen(
                 val totalStages = (activeScenario.nodes.size - 1).coerceAtLeast(1)
                 val nodeKey = "${activeScenario.id}_${node.id}"
 
-                // מיזוג האפשרויות הרגילות עם אלו שה-AI יצר וערבוב מחדש בכל ניסיון או טעות!
                 val shuffledOptions = remember(activeScenario.id, currentNodeId, shuffleSeed, aiStoreVersion) {
                     val combined = ArrayList<DialogueOption>()
                     combined.addAll(node.options)
@@ -476,11 +464,7 @@ fun ConversationScreen(
                                 .fillMaxWidth()
                                 .offset { IntOffset(shakeOffsetX.value.roundToInt(), 0) }
                         ) {
-                            AnimatedVisibility(
-                                visible = lastFeedback.isNotEmpty(),
-                                enter = expandVertically() + fadeIn(),
-                                exit = shrinkVertically() + fadeOut()
-                            ) {
+                            if (lastFeedback.isNotEmpty()) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -506,11 +490,12 @@ fun ConversationScreen(
                                 }
                             }
 
-                            // בועת הדיבור של הדמות
+                            // בועת הדיבור של הדמות (לחיצה על הכפתור או על הבועה מציגה/מסתירה את התרגום לעברית!)
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .border(2.dp, TealNeon, RoundedCornerShape(24.dp)),
+                                    .border(2.dp, TealNeon, RoundedCornerShape(24.dp))
+                                    .clickable { showHebrewTranslation = !showHebrewTranslation },
                                 shape = RoundedCornerShape(24.dp),
                                 colors = CardDefaults.cardColors(containerColor = CardDark)
                             ) {
@@ -528,15 +513,31 @@ fun ConversationScreen(
                                         )
 
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            TextButton(
-                                                onClick = { showHebrewTranslation = !showHebrewTranslation }
+                                            // כפתור תרגום בולט ומובטח שעובד בכל לחיצה
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(
+                                                        if (showHebrewTranslation) StarGold.copy(alpha = 0.22f)
+                                                        else Color(0xFF232B45)
+                                                    )
+                                                    .border(
+                                                        1.dp,
+                                                        StarGold,
+                                                        RoundedCornerShape(12.dp)
+                                                    )
+                                                    .clickable { showHebrewTranslation = !showHebrewTranslation }
+                                                    .padding(horizontal = 10.dp, vertical = 6.dp)
                                             ) {
                                                 Text(
-                                                    text = if (showHebrewTranslation) "הסתר תרגום" else "רמז (תרגום)",
+                                                    text = if (showHebrewTranslation) "הסתר תרגום עברי" else "🇮🇳 תרגם לעברית",
                                                     color = StarGold,
+                                                    fontWeight = FontWeight.Bold,
                                                     fontSize = 12.sp
                                                 )
                                             }
+
+                                            Spacer(modifier = Modifier.width(8.dp))
 
                                             IconButton(
                                                 onClick = { onSpeakEnglish(node.speakerLineEn) },
@@ -554,7 +555,7 @@ fun ConversationScreen(
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
 
                                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                                         Text(
@@ -567,16 +568,25 @@ fun ConversationScreen(
                                         )
                                     }
 
-                                    AnimatedVisibility(visible = showHebrewTranslation) {
-                                        Column {
-                                            Spacer(modifier = Modifier.height(10.dp))
-                                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
-                                            Spacer(modifier = Modifier.height(8.dp))
+                                    // הצגה מיידית וברורה של התרגום לעברית (ללא תלות ב-AnimatedVisibility)
+                                    if (showHebrewTranslation) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        HorizontalDivider(color = StarGold.copy(alpha = 0.4f))
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(Color(0xFF0E1629))
+                                                .border(1.dp, TealNeon.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                                                .padding(12.dp)
+                                        ) {
                                             Text(
-                                                text = node.speakerLineHe,
-                                                fontSize = 15.sp,
-                                                color = TealNeon.copy(alpha = 0.9f),
-                                                fontWeight = FontWeight.Medium
+                                                text = if (node.speakerLineHe.isNotBlank()) node.speakerLineHe else "לחץ על תשובה או המתן לטעינת התרגום...",
+                                                fontSize = 16.sp,
+                                                color = TealNeon,
+                                                fontWeight = FontWeight.Bold,
+                                                lineHeight = 23.sp
                                             )
                                         }
                                     }
@@ -639,7 +649,6 @@ fun ConversationScreen(
                                     }
                                 }
                             } else {
-                                // כותרת אפשרויות + כפתור הוספת תשובות מה-AI המקוון
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -722,7 +731,7 @@ fun ConversationScreen(
                                                     updatedSet.add(option.textEn)
                                                     wrongTextsInCurrentNode = updatedSet
                                                     livesRemaining--
-                                                    shuffleSeed++ // ערבוב מיידי של כל הכרטיסים אחרי טעות!
+                                                    shuffleSeed++
                                                     triggerErrorShake()
                                                 }
                                             },
@@ -746,12 +755,13 @@ fun ConversationScreen(
                                                         modifier = Modifier.fillMaxWidth()
                                                     )
                                                 }
-                                                if (showHebrewTranslation) {
-                                                    Spacer(modifier = Modifier.height(5.dp))
+                                                if (showHebrewTranslation && option.textHe.isNotBlank()) {
+                                                    Spacer(modifier = Modifier.height(6.dp))
                                                     Text(
-                                                        text = option.textHe,
-                                                        fontSize = 13.sp,
-                                                        color = Color.LightGray
+                                                        text = "תרגום: ${option.textHe}",
+                                                        fontSize = 14.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = StarGold
                                                     )
                                                 }
                                             }
@@ -800,7 +810,7 @@ fun ConversationScreen(
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "הקלד כל סיטואציה שתרצה לתרגל, או בחר נושא מהיר. מודל ה-AI יבנה שיחה ארוכה בת 6 שלבים עם תשובה נכונה ומלכודות דקדוק:",
+                            text = "הקלד כל סיטואציה שתרצה לתרגל, או בחר נושא מהיר. מודל ה-AI יבנה שיחה ארוכה בת 6 שלבים עם תשובה נכונה, תרגום עברי מלא ומלכודות דקדוק:",
                             color = Color.LightGray,
                             fontSize = 13.sp
                         )
@@ -880,7 +890,7 @@ fun ConversationScreen(
                             ) {
                                 CircularProgressIndicator(color = TealNeon, modifier = Modifier.size(22.dp))
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Text("מודל ה-AI בונה שיחה ארוכה ומאתגרת...", color = TealNeon, fontSize = 13.sp)
+                                Text("מודל ה-AI בונה שיחה ארוכה ומתרגם לעברית...", color = TealNeon, fontSize = 13.sp)
                             }
                         }
 
@@ -915,7 +925,7 @@ fun ConversationScreen(
                                     lastFeedback = ""
                                     shuffleSeed++
                                 }.onFailure { err ->
-                                    aiStatusMessage = "שגיאה ביצירת השיחה: ודא חיבור לאינטרנט או נסה שוב (${err.localizedMessage ?: "Timeout"})."
+                                    aiStatusMessage = "שגיאה ביצירת השיחה (${err.localizedMessage ?: "Error"})."
                                 }
                             }
                         },
@@ -935,7 +945,7 @@ fun ConversationScreen(
             )
         }
 
-        // --- דיאלוג הגדרת מפתח API אופציונלי (Gemini / OpenRouter) ---
+        // --- דיאלוג הגדרת מפתח API אופציונלי ---
         if (showApiKeyDialog) {
             var apiKeyInput by remember { mutableStateOf(repository.getCustomApiKey()) }
             AlertDialog(
