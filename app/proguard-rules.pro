@@ -1,3 +1,2 @@
--keep class com.example.englishtutor.WordCard { *; }
--keep class com.example.englishtutor.StudyFilter { *; }
+-keep class com.example.englishtutor.** { *; }
 -dontwarn androidx.compose.**
