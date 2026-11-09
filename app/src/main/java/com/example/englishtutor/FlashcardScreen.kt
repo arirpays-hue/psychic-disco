@@ -1,10 +1,5 @@
 package com.example.englishtutor
 
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -19,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -37,20 +33,15 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -81,11 +72,17 @@ data class FireworkBurst(
 )
 
 @Composable
-fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+fun FlashcardScreen(
+    words: List<WordCard>,
+    repository: WordRepository,
+    isSpeaking: Boolean,
+    autoSpeak: Boolean,
+    onToggleAutoSpeak: () -> Unit,
+    onSpeakWord: (String?) -> Unit,
+    onStopSpeaking: () -> Unit,
+    onOpenDrawer: () -> Unit
+) {
     val scope = rememberCoroutineScope()
-    val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     val allWords by remember { mutableStateOf(words) }
     var selectedFilter by remember { mutableStateOf(StudyFilter.SMART) }
@@ -98,123 +95,27 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
 
     var isFlipped by remember { mutableStateOf(false) }
     var isTransitioning by remember { mutableStateOf(false) }
-    var autoSpeak by remember { mutableStateOf(true) }
-    var isSpeaking by remember { mutableStateOf(false) }
     var comboStreak by remember { mutableIntStateOf(0) }
     var statusBannerText by remember { mutableStateOf<String?>(null) }
 
-    // --- מנוע הקראה קולית מוגן מקריסות + עצירה אוטומטית ביציאה לרקע ---
-    var ttsReady by remember { mutableStateOf(false) }
-    val ttsRef = remember { mutableStateOf<TextToSpeech?>(null) }
-    val activeUtteranceId = remember { mutableStateOf("") }
-
-    fun stopSpeakingSafely() {
-        activeUtteranceId.value = ""
-        isSpeaking = false
-        runCatching { ttsRef.value?.stop() }
-    }
-
-    DisposableEffect(context) {
-        var engine: TextToSpeech? = null
-        runCatching {
-            engine = TextToSpeech(context.applicationContext) { status ->
-                runCatching {
-                    if (status == TextToSpeech.SUCCESS) {
-                        val result = engine?.setLanguage(Locale.US)
-                        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                            engine?.setLanguage(Locale.ENGLISH)
-                        }
-                        engine?.setSpeechRate(0.92f)
-                        engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                            override fun onStart(utteranceId: String?) {
-                                mainHandler.post {
-                                    if (utteranceId == activeUtteranceId.value) isSpeaking = true
-                                }
-                            }
-
-                            override fun onDone(utteranceId: String?) {
-                                mainHandler.post {
-                                    if (utteranceId == activeUtteranceId.value) isSpeaking = false
-                                }
-                            }
-
-                            @Deprecated("Deprecated in Java")
-                            override fun onError(utteranceId: String?) {
-                                mainHandler.post {
-                                    if (utteranceId == activeUtteranceId.value) isSpeaking = false
-                                }
-                            }
-
-                            override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                                mainHandler.post {
-                                    if (utteranceId == activeUtteranceId.value) isSpeaking = false
-                                }
-                            }
-                        })
-                        ttsRef.value = engine
-                        ttsReady = true
-                    }
-                }
-            }
-        }
-        onDispose {
-            runCatching {
-                engine?.stop()
-                engine?.shutdown()
-            }
-            ttsRef.value = null
-        }
-    }
-
-    // עוצר את ההקראה הקולית אם האפליקציה עוברת לרקע
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
-                stopSpeakingSafely()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    fun speakWord(wordToSpeak: String?) {
-        val cleanWord = wordToSpeak?.trim() ?: return
-        val engine = ttsRef.value ?: return
-        if (ttsReady && cleanWord.isNotEmpty()) {
-            runCatching {
-                val newId = "TTS_${cleanWord.hashCode()}_${System.nanoTime()}"
-                activeUtteranceId.value = newId
-                engine.stop()
-                val params = Bundle().apply {
-                    putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
-                }
-                engine.speak(cleanWord, TextToSpeech.QUEUE_FLUSH, params, newId)
-            }
-        }
-    }
-
-    LaunchedEffect(currentWord?.english, ttsReady, autoSpeak) {
+    LaunchedEffect(currentWord?.english, autoSpeak) {
         val targetEnglish = currentWord?.english
-        if (ttsReady && autoSpeak && !targetEnglish.isNullOrBlank()) {
-            stopSpeakingSafely()
-            delay(200)
+        if (autoSpeak && !targetEnglish.isNullOrBlank()) {
+            onStopSpeaking()
+            delay(180)
             if (latestWord?.english == targetEnglish && !isTransitioning) {
-                speakWord(targetEnglish)
+                onSpeakWord(targetEnglish)
             }
         }
     }
 
-    // העלמת הודעת החיווי אחרי 1.8 שניות
     LaunchedEffect(statusBannerText) {
         if (statusBannerText != null) {
-            delay(1800)
+            delay(1700)
             statusBannerText = null
         }
     }
 
-    // --- ניהול גרירה ואנימציות ---
     var rawDragX by remember { mutableFloatStateOf(0f) }
     var rawDragY by remember { mutableFloatStateOf(0f) }
 
@@ -370,21 +271,39 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
         label = "borderColor"
     )
 
-    fun advanceToNextWord(exitDirection: Float = 0f) {
+    // פונקציה מאוחדת שמעדכנת את המילה הנוכחית ומחליפה אותה מיידית בלי לאפשר לה להיבחר שוב
+    fun handleWordActionAndAdvance(learned: Boolean? = null, hard: Boolean? = null, exitDirection: Float = 0f) {
         if (isTransitioning) return
+        val wordBeingHandled = latestWord ?: return
+        val previousEnglish = wordBeingHandled.english
+
+        // עדכון מיידי של המאגר והרשימה השחורה *לפני* תחילת האנימציה
+        repository.recordReview(wordBeingHandled, learned = learned, hard = hard)
+
+        if (learned == true) {
+            comboStreak++
+            statusBannerText = "✓ '${previousEnglish}' הוסרה לצמיתות!"
+            triggerConfetti()
+        } else if (hard == true) {
+            comboStreak = 0
+            statusBannerText = "⚡ '${previousEnglish}' תחזור לתרגול בעוד מספר כרטיסים"
+            triggerHardShake()
+        }
+        uiVersion++
+
         scope.launch {
             runCatching {
                 isTransitioning = true
-                stopSpeakingSafely()
+                onStopSpeaking()
 
                 val wasFlipped = isFlipped
                 isFlipped = false
 
                 if (exitDirection != 0f) {
                     rawDragX = exitDirection * 850f
-                    delay(150)
+                    delay(140)
                 } else if (wasFlipped) {
-                    delay(150)
+                    delay(140)
                 }
 
                 rawDragX = 0f
@@ -394,7 +313,7 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                 currentWord = repository.pickNextSmartWord(
                     allWords = allWords,
                     filter = selectedFilter,
-                    currentEnglish = latestWord?.english
+                    excludedEnglish = previousEnglish
                 )
                 uiVersion++
                 isTransitioning = false
@@ -412,22 +331,6 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                 isTransitioning = false
             }
         }
-    }
-
-    fun markCurrentWord(learned: Boolean? = null, hard: Boolean? = null) {
-        val word = latestWord ?: return
-        repository.recordReview(word, learned = learned, hard = hard)
-
-        if (learned == true) {
-            comboStreak++
-            statusBannerText = "✓ המילה הוסרה מהתור ולא תחזור!"
-            triggerConfetti()
-        } else if (hard == true) {
-            comboStreak = 0
-            statusBannerText = "⚡ המילה תוחזר לתרגול בהמשך!"
-            triggerHardShake()
-        }
-        uiVersion++
     }
 
     val learnedCount = remember(uiVersion, allWords) { allWords.count { it.isLearned } }
@@ -451,7 +354,6 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                     )
                 )
         ) {
-            // --- שכבה 1: כדורי אור מרחפים ברקע ---
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val w = size.width
                 val h = size.height
@@ -480,7 +382,6 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                 )
             }
 
-            // --- שכבה 2: תוכן המסך ---
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -488,40 +389,59 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // --- חלק עליון ---
-                Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                // --- חלק עליון עם כפתור פתיחת תפריט צד ---
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(CardDark)
-                                .border(
-                                    1.5.dp,
-                                    if (autoSpeak) TealNeon else Color.Gray.copy(0.3f),
-                                    RoundedCornerShape(20.dp)
-                                )
-                                .clickable { autoSpeak = !autoSpeak }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            SpeakerVectorIcon(
-                                tint = if (autoSpeak) TealNeon else Color.Gray,
-                                isMuted = !autoSpeak,
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = onOpenDrawer,
                                 modifier = Modifier
-                                    .size(18.dp)
-                                    .scale(if (isSpeaking) speakerWaveScale else 1f)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (autoSpeak) "הקראה אוטומטית" else "הקראה ידנית",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (autoSpeak) TealNeon else Color.Gray
-                            )
+                                    .size(42.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(CardDark)
+                                    .border(1.5.dp, TealNeon, RoundedCornerShape(12.dp))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Menu,
+                                    contentDescription = "פתח תפריט קטגוריות",
+                                    tint = TealNeon
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(CardDark)
+                                    .border(
+                                        1.5.dp,
+                                        if (autoSpeak) TealNeon else Color.Gray.copy(0.3f),
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .clickable { onToggleAutoSpeak() }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                SpeakerVectorIcon(
+                                    tint = if (autoSpeak) TealNeon else Color.Gray,
+                                    isMuted = !autoSpeak,
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .scale(if (isSpeaking) speakerWaveScale else 1f)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (autoSpeak) "הקראה אוטומטית" else "הקראה ידנית",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (autoSpeak) TealNeon else Color.Gray
+                                )
+                            }
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -604,7 +524,7 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                         shape = RoundedCornerShape(14.dp)
                                     )
                                     .clickable {
-                                        stopSpeakingSafely()
+                                        onStopSpeaking()
                                         rawDragX = 0f
                                         rawDragY = 0f
                                         selectedFilter = filter
@@ -625,7 +545,6 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                         }
                     }
 
-                    // באנר משוב מונפש בעת סימון מילה
                     AnimatedVisibility(
                         visible = statusBannerText != null,
                         enter = expandVertically() + fadeIn(),
@@ -651,7 +570,7 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                     }
                 }
 
-                // --- חלק מרכזי: הכרטיסייה או מסך הסיום המיוחד ---
+                // --- חלק מרכזי: הכרטיסייה או מסך הסיום ---
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -701,17 +620,15 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                         rotationX = (-animatedDragY / 35f).coerceIn(-8f, 8f)
                                         cameraDistance = 16f * density
                                     }
-                                    .pointerInput(Unit) {
+                                    .pointerInput(word.english) {
                                         detectDragGestures(
                                             onDragEnd = {
                                                 when {
                                                     rawDragX > 165f -> {
-                                                        markCurrentWord(learned = true)
-                                                        advanceToNextWord(exitDirection = 1f)
+                                                        handleWordActionAndAdvance(learned = true, exitDirection = 1f)
                                                     }
                                                     rawDragX < -165f -> {
-                                                        markCurrentWord(hard = true)
-                                                        advanceToNextWord(exitDirection = -1f)
+                                                        handleWordActionAndAdvance(hard = true, exitDirection = -1f)
                                                     }
                                                     else -> {
                                                         rawDragX = 0f
@@ -767,7 +684,6 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                         contentAlignment = Alignment.Center
                                     ) {
                                         if (flipRotation <= 90f) {
-                                            // --- צד קדמי: אנגלית ---
                                             Column(
                                                 modifier = Modifier.fillMaxSize(),
                                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -795,7 +711,7 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                                                     )
                                                             )
                                                             IconButton(
-                                                                onClick = { speakWord(latestWord?.english) },
+                                                                onClick = { onSpeakWord(latestWord?.english) },
                                                                 modifier = Modifier
                                                                     .size(42.dp)
                                                                     .clip(CircleShape)
@@ -833,7 +749,7 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                                                         Text(
                                                             text = when {
-                                                                isCurrentHard -> "⚡ חזרה על מילה קשה ($currentHardTimes)"
+                                                                isCurrentHard -> "⚡ מילה לחיזוק ($currentHardTimes)"
                                                                 isCurrentLearned -> "✓ נלמדה לצמיתות"
                                                                 currentSeen == 0 -> "✨ מילה חדשה"
                                                                 else -> "בתהליך למידה ($currentSeen)"
@@ -865,8 +781,8 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
 
                                                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                                                     val swipeStamp = when {
-                                                        rawDragX > 90f -> "✓ שחרר: נלמד (לא תחזור לעולם)"
-                                                        rawDragX < -90f -> "★ שחרר: קשה (תחזור בהמשך)"
+                                                        rawDragX > 90f -> "✓ שחרר: הובן (לא תחזור לעולם)"
+                                                        rawDragX < -90f -> "★ שחרר: קשה (תוחזר בהמשך)"
                                                         else -> "לחץ להיפוך • החלק ימינה (נלמד) או שמאלה (קשה)"
                                                     }
                                                     Text(
@@ -879,7 +795,6 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                                 }
                                             }
                                         } else {
-                                            // --- צד אחורי: הפירוש בעברית ---
                                             Column(
                                                 modifier = Modifier
                                                     .fillMaxSize()
@@ -905,7 +820,7 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                                 )
                                                 Spacer(modifier = Modifier.height(18.dp))
                                                 OutlinedButton(
-                                                    onClick = { speakWord(latestWord?.english) },
+                                                    onClick = { onSpeakWord(latestWord?.english) },
                                                     border = androidx.compose.foundation.BorderStroke(1.dp, TealNeon)
                                                 ) {
                                                     SpeakerVectorIcon(
@@ -943,7 +858,7 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                     }
                 }
 
-                // --- חלק תחתון: כפתורי פעולה (מוצגים כשיש כרטיס פעיל) ---
+                // --- חלק תחתון: כפתורי פעולה ---
                 if (currentWord != null) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
@@ -954,16 +869,12 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // כפתור נלמד -> מסמן לצמיתות ומעביר מיד למילה הבאה
                             BouncyActionIcon(
                                 label = "נלמד (לצמיתות)",
                                 activeColor = CheckNeon,
                                 isActive = isCurrentLearned,
                                 onClick = {
-                                    if (!isTransitioning) {
-                                        markCurrentWord(learned = true)
-                                        advanceToNextWord(exitDirection = 1f)
-                                    }
+                                    handleWordActionAndAdvance(learned = true, exitDirection = 1f)
                                 }
                             ) { tint ->
                                 Icon(
@@ -978,7 +889,7 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                 label = "הקרא שוב",
                                 activeColor = TealNeon,
                                 isActive = isSpeaking,
-                                onClick = { speakWord(latestWord?.english) }
+                                onClick = { onSpeakWord(latestWord?.english) }
                             ) { tint ->
                                 SpeakerVectorIcon(
                                     tint = tint,
@@ -987,16 +898,12 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                 )
                             }
 
-                            // כפתור קשה -> מתזמן את המילה לחזור בהמשך ועובר למילה הבאה
                             BouncyActionIcon(
                                 label = "קשה (יחזור)",
                                 activeColor = StarGold,
                                 isActive = isCurrentHard,
                                 onClick = {
-                                    if (!isTransitioning) {
-                                        markCurrentWord(hard = true)
-                                        advanceToNextWord(exitDirection = -1f)
-                                    }
+                                    handleWordActionAndAdvance(hard = true, exitDirection = -1f)
                                 }
                             ) { tint ->
                                 Icon(
@@ -1010,10 +917,7 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
 
                         Button(
                             onClick = {
-                                if (!isTransitioning) {
-                                    markCurrentWord()
-                                    advanceToNextWord(exitDirection = 0f)
-                                }
+                                handleWordActionAndAdvance(learned = null, hard = null, exitDirection = 0f)
                             },
                             modifier = Modifier
                                 .fillMaxWidth(0.86f)
@@ -1051,7 +955,6 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
     }
 }
 
-// --- מסך סיום חגיגי עם מופע זיקוקים ואנימציות מיוחדות ---
 @Composable
 fun VictoryCelebrationScreen(
     isAllWordsMastered: Boolean,
@@ -1118,7 +1021,6 @@ fun VictoryCelebrationScreen(
             .padding(8.dp),
         contentAlignment = Alignment.Center
     ) {
-        // שכבת זיקוקי דינור רב-מוקדיים ברקע
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
@@ -1142,7 +1044,6 @@ fun VictoryCelebrationScreen(
             }
         }
 
-        // כרטיס הניצחון המרכזי
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
@@ -1157,7 +1058,6 @@ fun VictoryCelebrationScreen(
                     .padding(horizontal = 22.dp, vertical = 26.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // גביע מרחף בתוך טבעות אנרגיה מסתובבות
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.size(130.dp)
@@ -1219,7 +1119,6 @@ fun VictoryCelebrationScreen(
 
                 Spacer(modifier = Modifier.height(22.dp))
 
-                // כפתור איפוס והתחלה מחדש של כל המילים
                 Button(
                     onClick = onResetAllProgressClick,
                     modifier = Modifier
@@ -1245,7 +1144,6 @@ fun VictoryCelebrationScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // כפתור עיון חופשי בכל המאגר
                 OutlinedButton(
                     onClick = onReviewAllClick,
                     modifier = Modifier
