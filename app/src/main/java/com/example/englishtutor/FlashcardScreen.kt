@@ -81,7 +81,6 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
         mutableStateOf(repository.pickNextSmartWord(allWords, selectedFilter, null))
     }
 
-    // מונה גרסת UI שמבטיח רינדור מיידי כשמשנים מאפיינים פנימיים של המילה הנוכחית
     var uiVersion by remember { mutableIntStateOf(0) }
     val latestWord by rememberUpdatedState(currentWord)
 
@@ -91,84 +90,89 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
     var isSpeaking by remember { mutableStateOf(false) }
     var comboStreak by remember { mutableIntStateOf(0) }
 
-    // --- מנוע הקראה קולית מסונכרן עם אימות מזהה קריאה (Utterance ID Verification) ---
+    // --- מנוע הקראה קולית מוגן מקריסות (Crash-Safe TTS) ---
     var ttsReady by remember { mutableStateOf(false) }
     val ttsRef = remember { mutableStateOf<TextToSpeech?>(null) }
     val activeUtteranceId = remember { mutableStateOf("") }
 
     DisposableEffect(context) {
         var engine: TextToSpeech? = null
-        engine = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val result = engine?.setLanguage(Locale.US)
-                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    engine?.setLanguage(Locale.ENGLISH)
+        runCatching {
+            engine = TextToSpeech(context.applicationContext) { status ->
+                runCatching {
+                    if (status == TextToSpeech.SUCCESS) {
+                        val result = engine?.setLanguage(Locale.US)
+                        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                            engine?.setLanguage(Locale.ENGLISH)
+                        }
+                        engine?.setSpeechRate(0.92f)
+                        engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                            override fun onStart(utteranceId: String?) {
+                                mainHandler.post {
+                                    if (utteranceId == activeUtteranceId.value) isSpeaking = true
+                                }
+                            }
+
+                            override fun onDone(utteranceId: String?) {
+                                mainHandler.post {
+                                    if (utteranceId == activeUtteranceId.value) isSpeaking = false
+                                }
+                            }
+
+                            @Deprecated("Deprecated in Java")
+                            override fun onError(utteranceId: String?) {
+                                mainHandler.post {
+                                    if (utteranceId == activeUtteranceId.value) isSpeaking = false
+                                }
+                            }
+
+                            override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                                mainHandler.post {
+                                    if (utteranceId == activeUtteranceId.value) isSpeaking = false
+                                }
+                            }
+                        })
+                        ttsRef.value = engine
+                        ttsReady = true
+                    }
                 }
-                engine?.setSpeechRate(0.92f)
-                engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {
-                        mainHandler.post {
-                            if (utteranceId == activeUtteranceId.value) {
-                                isSpeaking = true
-                            }
-                        }
-                    }
-
-                    override fun onDone(utteranceId: String?) {
-                        mainHandler.post {
-                            if (utteranceId == activeUtteranceId.value) {
-                                isSpeaking = false
-                            }
-                        }
-                    }
-
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        mainHandler.post {
-                            if (utteranceId == activeUtteranceId.value) {
-                                isSpeaking = false
-                            }
-                        }
-                    }
-
-                    override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                        mainHandler.post {
-                            if (utteranceId == activeUtteranceId.value) {
-                                isSpeaking = false
-                            }
-                        }
-                    }
-                })
-                ttsRef.value = engine
-                ttsReady = true
             }
         }
         onDispose {
-            engine?.stop()
-            engine?.shutdown()
+            runCatching {
+                engine?.stop()
+                engine?.shutdown()
+            }
             ttsRef.value = null
         }
+    }
+
+    fun stopSpeakingSafely() {
+        activeUtteranceId.value = ""
+        isSpeaking = false
+        runCatching { ttsRef.value?.stop() }
     }
 
     fun speakWord(wordToSpeak: String?) {
         val cleanWord = wordToSpeak?.trim() ?: return
         val engine = ttsRef.value ?: return
         if (ttsReady && cleanWord.isNotEmpty()) {
-            val newId = "TTS_${cleanWord}_${System.nanoTime()}"
-            activeUtteranceId.value = newId
-            engine.stop()
-            val params = Bundle().apply {
-                putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+            runCatching {
+                val newId = "TTS_${cleanWord.hashCode()}_${System.nanoTime()}"
+                activeUtteranceId.value = newId
+                engine.stop()
+                val params = Bundle().apply {
+                    putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+                }
+                engine.speak(cleanWord, TextToSpeech.QUEUE_FLUSH, params, newId)
             }
-            engine.speak(cleanWord, TextToSpeech.QUEUE_FLUSH, params, newId)
         }
     }
 
     LaunchedEffect(currentWord?.english, ttsReady, autoSpeak) {
         val targetEnglish = currentWord?.english
         if (ttsReady && autoSpeak && !targetEnglish.isNullOrBlank()) {
-            ttsRef.value?.stop()
-            isSpeaking = false
+            stopSpeakingSafely()
             delay(200)
             if (latestWord?.english == targetEnglish && !isTransitioning) {
                 speakWord(targetEnglish)
@@ -176,19 +180,37 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
         }
     }
 
-    // --- אנימציות ---
-    val dragOffsetX = remember { Animatable(0f) }
-    val dragOffsetY = remember { Animatable(0f) }
+    // --- ניהול גרירה ואנימציות ללא התנגשות קורוטינות (Zero-Crash Gesture State) ---
+    var rawDragX by remember { mutableFloatStateOf(0f) }
+    var rawDragY by remember { mutableFloatStateOf(0f) }
+
+    val animatedDragX by animateFloatAsState(
+        targetValue = rawDragX,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "dragX"
+    )
+    val animatedDragY by animateFloatAsState(
+        targetValue = rawDragY,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "dragY"
+    )
+
     val cardEnterScale = remember { Animatable(1f) }
     val cardShakeX = remember { Animatable(0f) }
     val confettiProgress = remember { Animatable(0f) }
     var showConfetti by remember { mutableStateOf(false) }
 
     val confettiParticles = remember {
-        List(36) {
+        List(32) {
             ConfettiParticle(
                 angle = Random.nextFloat() * 2f * PI.toFloat(),
-                speed = Random.nextFloat() * 380f + 120f,
+                speed = Random.nextFloat() * 360f + 120f,
                 radius = Random.nextFloat() * 6f + 4f,
                 color = listOf(TealNeon, CheckNeon, StarGold, PurpleNeon, Color.White).random()
             )
@@ -197,30 +219,34 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
 
     fun triggerConfetti() {
         scope.launch {
-            showConfetti = true
-            confettiProgress.snapTo(0f)
-            confettiProgress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(850, easing = FastOutSlowInEasing)
-            )
-            showConfetti = false
+            runCatching {
+                showConfetti = true
+                confettiProgress.snapTo(0f)
+                confettiProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(800, easing = FastOutSlowInEasing)
+                )
+                showConfetti = false
+            }
         }
     }
 
     fun triggerHardShake() {
         scope.launch {
-            for (i in 0..5) {
-                val target = if (i % 2 == 0) 16f else -16f
-                cardShakeX.animateTo(target, tween(40))
+            runCatching {
+                for (i in 0..4) {
+                    val target = if (i % 2 == 0) 15f else -15f
+                    cardShakeX.animateTo(target, tween(40))
+                }
+                cardShakeX.animateTo(0f, spring())
             }
-            cardShakeX.animateTo(0f, spring())
         }
     }
 
     val flipRotation by animateFloatAsState(
         targetValue = if (isFlipped) 180f else 0f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
+            dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMediumLow
         ),
         label = "flipRotation"
@@ -229,8 +255,8 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
     val infiniteTransition = rememberInfiniteTransition(label = "infiniteFX")
 
     val breathingScale by infiniteTransition.animateFloat(
-        initialValue = 0.99f,
-        targetValue = 1.012f,
+        initialValue = 0.992f,
+        targetValue = 1.01f,
         animationSpec = infiniteRepeatable(
             animation = tween(2200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -239,23 +265,13 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
     )
 
     val floatingOffsetY by infiniteTransition.animateFloat(
-        initialValue = -6f,
-        targetValue = 6f,
+        initialValue = -5f,
+        targetValue = 5f,
         animationSpec = infiniteRepeatable(
             animation = tween(2600, easing = EaseInOutSine),
             repeatMode = RepeatMode.Reverse
         ),
         label = "floatingY"
-    )
-
-    val cardTiltWobble by infiniteTransition.animateFloat(
-        initialValue = -0.8f,
-        targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3400, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "tiltWobble"
     )
 
     val shimmerSweep by infiniteTransition.animateFloat(
@@ -290,7 +306,7 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
 
     val speakerWaveScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isSpeaking) 1.4f else 1.05f,
+        targetValue = if (isSpeaking) 1.38f else 1.04f,
         animationSpec = infiniteRepeatable(
             animation = tween(460, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -309,85 +325,72 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
 
     val dynamicBorderColor by animateColorAsState(
         targetValue = when {
-            dragOffsetX.value > 100f -> CheckNeon
-            dragOffsetX.value < -100f -> StarGold
+            rawDragX > 100f -> CheckNeon
+            rawDragX < -100f -> StarGold
             isCurrentHard -> StarGold
             isCurrentLearned -> CheckNeon
             isFlipped -> PurpleNeon
             else -> TealNeon
         },
-        animationSpec = tween(250),
+        animationSpec = tween(220),
         label = "borderColor"
     )
 
-    // מעבר בטוח למילה הבאה שמונע לחלוטין חשיפה של התרגום הבא בזמן סיבוב הכרטיס
     fun advanceToNextWord(exitDirection: Float = 0f) {
         if (isTransitioning) return
         scope.launch {
-            isTransitioning = true
-            activeUtteranceId.value = ""
-            ttsRef.value?.stop()
-            isSpeaking = false
+            runCatching {
+                isTransitioning = true
+                stopSpeakingSafely()
 
-            val wasFlipped = isFlipped
-            isFlipped = false
+                val wasFlipped = isFlipped
+                isFlipped = false
 
-            if (exitDirection != 0f) {
-                dragOffsetX.animateTo(exitDirection * 950f, tween(190))
-            } else if (wasFlipped) {
-                // ממתין שהכרטיס יעבור את נקודת ה-90 מעלות לפני שמחליפים את תוכן המילה
-                delay(160)
-            }
+                if (exitDirection != 0f) {
+                    rawDragX = exitDirection * 850f
+                    delay(150)
+                } else if (wasFlipped) {
+                    delay(150)
+                }
 
-            cardEnterScale.snapTo(0.82f)
-            dragOffsetX.snapTo(0f)
-            dragOffsetY.snapTo(0f)
+                rawDragX = 0f
+                rawDragY = 0f
+                cardEnterScale.snapTo(0.84f)
 
-            currentWord = repository.pickNextSmartWord(
-                allWords = allWords,
-                filter = selectedFilter,
-                currentEnglish = latestWord?.english
-            )
-            uiVersion++
-            isTransitioning = false
-
-            cardEnterScale.animateTo(
-                targetValue = 1f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessLow
+                currentWord = repository.pickNextSmartWord(
+                    allWords = allWords,
+                    filter = selectedFilter,
+                    currentEnglish = latestWord?.english
                 )
-            )
+                uiVersion++
+                isTransitioning = false
+
+                cardEnterScale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                )
+            }.onFailure {
+                rawDragX = 0f
+                rawDragY = 0f
+                isTransitioning = false
+            }
         }
     }
 
     fun markCurrentWord(learned: Boolean? = null, hard: Boolean? = null) {
         val word = latestWord ?: return
-        word.timesSeen++
-        word.lastSeenTimestamp = System.currentTimeMillis()
+        repository.recordReview(word, learned = learned, hard = hard)
 
-        if (learned != null) {
-            word.isLearned = learned
-            if (learned) {
-                word.streak++
-                word.isHard = false
-                comboStreak++
-                triggerConfetti()
-            } else {
-                word.streak = 0
-                comboStreak = 0
-            }
+        if (learned == true) {
+            comboStreak++
+            triggerConfetti()
+        } else if (learned == false || hard == true) {
+            comboStreak = 0
+            if (hard == true) triggerHardShake()
         }
-        if (hard != null) {
-            word.isHard = hard
-            if (hard) {
-                word.streak = 0
-                word.isLearned = false
-                comboStreak = 0
-                triggerHardShake()
-            }
-        }
-        repository.saveWordState(word)
         uiVersion++
     }
 
@@ -563,9 +566,9 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                         shape = RoundedCornerShape(14.dp)
                                     )
                                     .clickable {
-                                        activeUtteranceId.value = ""
-                                        ttsRef.value?.stop()
-                                        isSpeaking = false
+                                        stopSpeakingSafely()
+                                        rawDragX = 0f
+                                        rawDragY = 0f
                                         selectedFilter = filter
                                         isFlipped = false
                                         currentWord = repository.pickNextSmartWord(allWords, filter, null)
@@ -631,42 +634,44 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                     .height(345.dp)
                                     .offset {
                                         IntOffset(
-                                            x = (dragOffsetX.value + cardShakeX.value).roundToInt(),
-                                            y = (dragOffsetY.value + floatingOffsetY).roundToInt()
+                                            x = (animatedDragX + cardShakeX.value).roundToInt(),
+                                            y = (animatedDragY + floatingOffsetY).roundToInt()
                                         )
                                     }
                                     .scale(cardEnterScale.value * breathingScale)
                                     .graphicsLayer {
                                         rotationY = flipRotation
-                                        rotationZ = (dragOffsetX.value / 25f).coerceIn(-18f, 18f) + cardTiltWobble
-                                        rotationX = (-dragOffsetY.value / 35f).coerceIn(-10f, 10f)
+                                        rotationZ = (animatedDragX / 25f).coerceIn(-16f, 16f)
+                                        rotationX = (-animatedDragY / 35f).coerceIn(-8f, 8f)
                                         cameraDistance = 16f * density
                                     }
                                     .pointerInput(Unit) {
                                         detectDragGestures(
                                             onDragEnd = {
                                                 when {
-                                                    dragOffsetX.value > 180f -> {
+                                                    rawDragX > 170f -> {
                                                         markCurrentWord(learned = true)
                                                         advanceToNextWord(exitDirection = 1f)
                                                     }
-                                                    dragOffsetX.value < -180f -> {
+                                                    rawDragX < -170f -> {
                                                         markCurrentWord(hard = true)
                                                         advanceToNextWord(exitDirection = -1f)
                                                     }
                                                     else -> {
-                                                        scope.launch {
-                                                            dragOffsetX.animateTo(0f, spring(Spring.DampingRatioMediumBouncy))
-                                                            dragOffsetY.animateTo(0f, spring(Spring.DampingRatioMediumBouncy))
-                                                        }
+                                                        rawDragX = 0f
+                                                        rawDragY = 0f
                                                     }
                                                 }
                                             },
+                                            onDragCancel = {
+                                                rawDragX = 0f
+                                                rawDragY = 0f
+                                            },
                                             onDrag = { change, dragAmount ->
                                                 change.consume()
-                                                scope.launch {
-                                                    dragOffsetX.snapTo(dragOffsetX.value + dragAmount.x)
-                                                    dragOffsetY.snapTo(dragOffsetY.value + dragAmount.y * 0.35f)
+                                                if (!isTransitioning) {
+                                                    rawDragX = (rawDragX + dragAmount.x).coerceIn(-500f, 500f)
+                                                    rawDragY = (rawDragY + dragAmount.y * 0.3f).coerceIn(-200f, 200f)
                                                 }
                                             }
                                         )
@@ -679,7 +684,7 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                     .border(2.5.dp, dynamicBorderColor, RoundedCornerShape(28.dp)),
                                 shape = RoundedCornerShape(28.dp),
                                 colors = CardDefaults.cardColors(containerColor = CardDark),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 22.dp)
+                                elevation = CardDefaults.cardElevation(defaultElevation = 20.dp)
                             ) {
                                 Box(modifier = Modifier.fillMaxSize()) {
                                     Canvas(modifier = Modifier.fillMaxSize()) {
@@ -787,8 +792,8 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                                                 AnimatedContent(
                                                     targetState = word.english,
                                                     transitionSpec = {
-                                                        (fadeIn(tween(220)) + scaleIn(initialScale = 0.88f))
-                                                            .togetherWith(fadeOut(tween(140)) + scaleOut(targetScale = 1.08f))
+                                                        (fadeIn(tween(200)) + scaleIn(initialScale = 0.9f))
+                                                            .togetherWith(fadeOut(tween(120)))
                                                     },
                                                     label = "cleanEnglishWord"
                                                 ) { targetEnglish ->
@@ -804,15 +809,15 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
 
                                                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                                                     val swipeStamp = when {
-                                                        dragOffsetX.value > 90f -> "✓ סמן כנלמד"
-                                                        dragOffsetX.value < -90f -> "★ סמן כקשה"
+                                                        rawDragX > 90f -> "✓ שחרר לסימון 'נלמד'"
+                                                        rawDragX < -90f -> "★ שחרר לסימון 'קשה'"
                                                         else -> "לחץ להיפוך • החלק ימינה (נלמד) או שמאלה (קשה)"
                                                     }
                                                     Text(
                                                         text = swipeStamp,
-                                                        fontSize = if (abs(dragOffsetX.value) > 90f) 16.sp else 12.sp,
-                                                        fontWeight = if (abs(dragOffsetX.value) > 90f) FontWeight.ExtraBold else FontWeight.Normal,
-                                                        color = if (abs(dragOffsetX.value) > 90f) dynamicBorderColor else Color.Gray,
+                                                        fontSize = if (abs(rawDragX) > 90f) 15.sp else 12.sp,
+                                                        fontWeight = if (abs(rawDragX) > 90f) FontWeight.ExtraBold else FontWeight.Normal,
+                                                        color = if (abs(rawDragX) > 90f) dynamicBorderColor else Color.Gray,
                                                         textAlign = TextAlign.Center
                                                     )
                                                 }
@@ -897,9 +902,11 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                             activeColor = CheckNeon,
                             isActive = isCurrentLearned,
                             onClick = {
-                                val newState = !(latestWord?.isLearned ?: false)
-                                markCurrentWord(learned = newState)
-                                if (newState) advanceToNextWord(exitDirection = 1f)
+                                if (!isTransitioning) {
+                                    val newState = !(latestWord?.isLearned ?: false)
+                                    markCurrentWord(learned = newState)
+                                    if (newState) advanceToNextWord(exitDirection = 1f)
+                                }
                             }
                         ) { tint ->
                             Icon(
@@ -928,8 +935,10 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
                             activeColor = StarGold,
                             isActive = isCurrentHard,
                             onClick = {
-                                val newState = !(latestWord?.isHard ?: false)
-                                markCurrentWord(hard = newState)
+                                if (!isTransitioning) {
+                                    val newState = !(latestWord?.isHard ?: false)
+                                    markCurrentWord(hard = newState)
+                                }
                             }
                         ) { tint ->
                             Icon(
@@ -943,8 +952,10 @@ fun FlashcardScreen(words: List<WordCard>, repository: WordRepository) {
 
                     Button(
                         onClick = {
-                            markCurrentWord()
-                            advanceToNextWord(exitDirection = 0f)
+                            if (!isTransitioning) {
+                                markCurrentWord()
+                                advanceToNextWord(exitDirection = 0f)
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth(0.86f)
@@ -1104,11 +1115,11 @@ fun BouncyActionIcon(
 
     val pressScale by animateFloatAsState(
         targetValue = when {
-            isPressed -> 0.8f
-            isActive -> 1.12f
+            isPressed -> 0.82f
+            isActive -> 1.1f
             else -> 1f
         },
-        animationSpec = spring(dampingRatio = Spring.DampingRatioHighBouncy),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "bouncyIconScale"
     )
 
