@@ -42,7 +42,7 @@ data class ConversationScenario(
 
 class ConversationRepository(private val context: Context) {
     private val prefs: SharedPreferences =
-        context.getSharedPreferences("conversations_prefs_v2", Context.MODE_PRIVATE)
+        context.getSharedPreferences("conversations_prefs_v3", Context.MODE_PRIVATE)
 
     fun getCustomApiKey(): String = prefs.getString("custom_ai_api_key", "") ?: ""
 
@@ -66,6 +66,38 @@ class ConversationRepository(private val context: Context) {
         return list
     }
 
+    // מסיר תווים בעברית אם ה-AI שילב בטעות מילים בעברית בתוך המשפט באנגלית
+    private fun sanitizeEnglishOnly(text: String, fallback: String): String {
+        val withoutHebrew = text.replace(Regex("[\\u0590-\\u05FF]+"), "").replace("()", "").replace("  ", " ").trim()
+        return if (withoutHebrew.length >= 4) withoutHebrew else fallback
+    }
+
+    // מתרגם אוטומטית מאנגלית לעברית דרך שירות תרגום חינמי אם ה-AI החזיר שדה תרגום ריק
+    private fun translateEnToHeFallback(englishText: String): String {
+        if (englishText.isBlank()) return ""
+        return runCatching {
+            val encoded = URLEncoder.encode(englishText, "UTF-8")
+            val url = URL("https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=iw&dt=t&q=$encoded")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("User-Agent", "Mozilla/5.0")
+                connectTimeout = 5000
+                readTimeout = 5000
+            }
+            val response = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+            val outerArray = JSONArray(response)
+            val sentences = outerArray.getJSONArray(0)
+            val sb = StringBuilder()
+            for (i in 0 until sentences.length()) {
+                val part = sentences.optJSONArray(i)
+                if (part != null && part.length() > 0) {
+                    sb.append(part.optString(0, ""))
+                }
+            }
+            sb.toString().trim()
+        }.getOrDefault("לחץ להשמעת המשפט באנגלית ונסה להבין מההקשר")
+    }
+
     private fun parseScenariosArray(jsonStr: String, isAi: Boolean): List<ConversationScenario> {
         val result = mutableListOf<ConversationScenario>()
         try {
@@ -84,7 +116,7 @@ class ConversationRepository(private val context: Context) {
         val id = obj.optString("id").trim()
         val categoryHe = obj.optString("categoryHe", if (isAiFallback) "שיחות AI ✨" else "כללי").trim()
         val titleHe = obj.optString("titleHe").trim()
-        val titleEn = obj.optString("titleEn").trim()
+        val titleEn = obj.optString("titleEn", "English Roleplay Conversation").trim()
         val difficultyHe = obj.optString("difficultyHe", "בינוני").trim()
         val isAi = obj.optBoolean("isAiGenerated", isAiFallback)
 
@@ -95,20 +127,31 @@ class ConversationRepository(private val context: Context) {
             val nObj = nodesArr.optJSONObject(j) ?: continue
             val nodeId = nObj.optString("id").trim()
             val speakerName = nObj.optString("speakerName", "Speaker").trim()
-            val speakerLineEn = nObj.optString("speakerLineEn").trim()
-            val speakerLineHe = nObj.optString("speakerLineHe").trim()
+            val rawSpeakerEn = nObj.optString("speakerLineEn").trim()
+            val speakerLineEn = sanitizeEnglishOnly(rawSpeakerEn, "Hello! Could you please explain the details so I can assist you?")
+
+            // תומך בכל שמות השדות האפשריים שה-AI עלול להחזיר עבור התרגום לעברית
+            var speakerLineHe = nObj.optString("speakerLineHe").ifBlank {
+                nObj.optString("hebrew").ifBlank { nObj.optString("translation") }
+            }.trim()
+
             val isEnding = nObj.optBoolean("isEnding", false)
 
             val optionsList = mutableListOf<DialogueOption>()
             val optsArr = nObj.optJSONArray("options") ?: JSONArray()
             for (k in 0 until optsArr.length()) {
                 val oObj = optsArr.optJSONObject(k) ?: continue
-                val textEn = oObj.optString("textEn").trim()
+                val rawOptEn = oObj.optString("textEn").trim()
+                val textEn = sanitizeEnglishOnly(rawOptEn, "")
+                val textHe = oObj.optString("textHe").ifBlank {
+                    oObj.optString("hebrew").ifBlank { oObj.optString("translation") }
+                }.trim()
+
                 if (textEn.isNotEmpty()) {
                     optionsList.add(
                         DialogueOption(
                             textEn = textEn,
-                            textHe = oObj.optString("textHe").trim(),
+                            textHe = textHe,
                             nextNodeId = oObj.optString("nextNodeId", nodeId).trim(),
                             feedbackHe = oObj.optString("feedbackHe").trim(),
                             isOptimal = oObj.optBoolean("isOptimal", false)
@@ -142,6 +185,42 @@ class ConversationRepository(private val context: Context) {
         } else null
     }
 
+    // משלים תרגומים חסרים לעברית ב-JSON שהגיע מה-AI לפני השמירה
+    private fun enrichMissingHebrewTranslations(scenarioObj: JSONObject) {
+        val nodesArr = scenarioObj.optJSONArray("nodes") ?: return
+        for (i in 0 until nodesArr.length()) {
+            val nObj = nodesArr.optJSONObject(i) ?: continue
+            val cleanEn = sanitizeEnglishOnly(
+                nObj.optString("speakerLineEn"),
+                "Hello! Could you please share the details so I can help you today?"
+            )
+            nObj.put("speakerLineEn", cleanEn)
+
+            val currentHe = nObj.optString("speakerLineHe").trim()
+            if (currentHe.isEmpty()) {
+                nObj.put("speakerLineHe", translateEnToHeFallback(cleanEn))
+            }
+
+            val optsArr = nObj.optJSONArray("options") ?: continue
+            for (j in 0 until optsArr.length()) {
+                val oObj = optsArr.optJSONObject(j) ?: continue
+                val optEn = sanitizeEnglishOnly(oObj.optString("textEn"), "Yes, let me explain.")
+                oObj.put("textEn", optEn)
+                if (oObj.optString("textHe").isBlank()) {
+                    oObj.put("textHe", translateEnToHeFallback(optEn))
+                }
+                if (oObj.optString("feedbackHe").isBlank()) {
+                    val isOpt = oObj.optBoolean("isOptimal", false)
+                    oObj.put(
+                        "feedbackHe",
+                        if (isOpt) "✓ תשובה מצוינת! דקדוק תקין וניסוח מנומס."
+                        else "✗ תשובה שגויה דקדוקית או שאינה מתאימה להקשר השיחה. נסה שוב!"
+                    )
+                }
+            }
+        }
+    }
+
     private fun saveAiScenarioToPrefs(scenarioObj: JSONObject) {
         try {
             scenarioObj.put("isAiGenerated", true)
@@ -165,11 +244,9 @@ class ConversationRepository(private val context: Context) {
         prefs.edit().putBoolean("completed_$scenarioId", true).apply()
     }
 
-    // --- קריאת רשת מהירה עם מעבר אוטומטי בין שרתים למניעת Timeout ---
     private suspend fun requestAiJson(systemPrompt: String, userPrompt: String): String = withContext(Dispatchers.IO) {
         val customKey = getCustomApiKey()
 
-        // 1. אם הוגדר מפתח Gemini API אישי (AIza...)
         if (customKey.startsWith("AIza")) {
             val geminiUrl = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$customKey")
             val conn = (geminiUrl.openConnection() as HttpURLConnection).apply {
@@ -177,7 +254,7 @@ class ConversationRepository(private val context: Context) {
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 setRequestProperty("User-Agent", "EnglishTutorAndroid/4.0")
                 connectTimeout = 20000
-                readTimeout = 45000
+                readTimeout = 40000
                 doOutput = true
             }
             val payload = JSONObject().apply {
@@ -199,64 +276,44 @@ class ConversationRepository(private val context: Context) {
                 .getString("text")
         }
 
-        // 2. ניסיון ראשון: POST מהיר לשרת Pollinations OpenAI או OpenRouter
-        val postAttempt = runCatching {
-            val endpointUrl = if (customKey.startsWith("sk-")) {
-                URL("https://openrouter.ai/api/v1/chat/completions")
-            } else {
-                URL("https://text.pollinations.ai/openai")
-            }
-
-            val conn = (endpointUrl.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
-                if (customKey.startsWith("sk-")) {
-                    setRequestProperty("Authorization", "Bearer $customKey")
-                }
-                connectTimeout = 15000
-                readTimeout = 28000
-                doOutput = true
-            }
-
-            val messages = JSONArray().apply {
-                put(JSONObject().put("role", "system").put("content", systemPrompt))
-                put(JSONObject().put("role", "user").put("content", userPrompt))
-            }
-
-            val body = JSONObject().apply {
-                put("model", if (customKey.startsWith("sk-")) "google/gemini-2.5-flash" else "openai-fast")
-                put("messages", messages)
-                put("temperature", 0.7)
-            }
-
-            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
-            val rawResponse = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
-            val trimmed = rawResponse.trim()
-            if (trimmed.startsWith("{") && trimmed.contains("\"choices\"")) {
-                val root = JSONObject(trimmed)
-                root.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
-            } else {
-                trimmed
-            }
+        val endpointUrl = if (customKey.startsWith("sk-")) {
+            URL("https://openrouter.ai/api/v1/chat/completions")
+        } else {
+            URL("https://text.pollinations.ai/openai")
         }
 
-        if (postAttempt.isSuccess) {
-            val text = postAttempt.getOrThrow()
-            if (text.contains("{") || text.contains("[")) return@withContext text
-        }
-
-        // 3. ניסיון שני: נקודת קצה ישירה ומהירה ב-GET
-        val combinedPrompt = URLEncoder.encode("$systemPrompt\n$userPrompt", "UTF-8")
-        val getUrl = URL("https://text.pollinations.ai/$combinedPrompt?model=openai-fast&json=true")
-        val getConn = (getUrl.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
+        val conn = (endpointUrl.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            setRequestProperty("Accept", "application/json")
             setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14)")
-            connectTimeout = 12000
-            readTimeout = 22000
+            if (customKey.startsWith("sk-")) {
+                setRequestProperty("Authorization", "Bearer $customKey")
+            }
+            connectTimeout = 14000
+            readTimeout = 24000
+            doOutput = true
         }
-        return@withContext BufferedReader(InputStreamReader(getConn.inputStream, Charsets.UTF_8)).use { it.readText() }
+
+        val messages = JSONArray().apply {
+            put(JSONObject().put("role", "system").put("content", systemPrompt))
+            put(JSONObject().put("role", "user").put("content", userPrompt))
+        }
+
+        val body = JSONObject().apply {
+            put("model", if (customKey.startsWith("sk-")) "google/gemini-2.5-flash" else "openai-fast")
+            put("messages", messages)
+            put("temperature", 0.7)
+        }
+
+        OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
+        val rawResponse = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+        val trimmed = rawResponse.trim()
+        if (trimmed.startsWith("{") && trimmed.contains("\"choices\"")) {
+            val root = JSONObject(trimmed)
+            return@withContext root.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
+        }
+        return@withContext trimmed
     }
 
     private fun extractCleanJsonObject(raw: String): JSONObject {
@@ -279,12 +336,166 @@ class ConversationRepository(private val context: Context) {
         throw IllegalArgumentException("Invalid JSON Array format")
     }
 
-    // --- מנוע גיבוי חכם ומיידי שבונה שיחה מלאה של 6 שלבים על כל נושא אם השרת החיצוני ב-Timeout ---
+    // --- מחולל שיחות חכם עם 100% אנגלית טהורה ב-speakerLineEn ותרגום עברי מלא ב-speakerLineHe ---
     private fun buildSmartDynamicScenarioJson(topicHe: String, difficultyHe: String): JSONObject {
         val t = topicHe.trim()
+        val isSecurityAirport = t.contains("ביטחונית") || t.contains("שדה תעופה") || t.contains("תשאול") || t.contains("טיסה")
         val isLondonApartment = t.contains("דירה") || t.contains("לונדון") || t.contains("שכיר")
         val isDentistOrDoctor = t.contains("שיניים") || t.contains("רופא") || t.contains("מרפאה")
         val isBank = t.contains("בנק") || t.contains("אשראי") || t.contains("חשבון")
+
+        if (isSecurityAirport) {
+            return JSONObject("""
+                {
+                  "id": "ai_${System.currentTimeMillis()}",
+                  "categoryHe": "שיחות AI ✨",
+                  "titleHe": "$t",
+                  "titleEn": "Airport Security Screening & Questioning",
+                  "difficultyHe": "$difficultyHe",
+                  "nodes": [
+                    {
+                      "id": "start",
+                      "speakerName": "Security Officer",
+                      "speakerLineEn": "Good morning. Please step aside for a routine security check. Did you pack your carry-on bag yourself this morning?",
+                      "speakerLineHe": "בוקר טוב. אנא זוז הצידה לבדיקה ביטחונית שגרתית. האם ארזת את תיק היד שלך בעצמך הבוקר?",
+                      "options": [
+                        {
+                          "textEn": "Yes, officer. I packed my bag myself at the hotel, and it has been with me the entire time.",
+                          "textHe": "כן, אדוני השוטר. ארזתי את התיק בעצמי במלון, והוא היה איתי כל הזמן.",
+                          "nextNodeId": "step2",
+                          "feedbackHe": "✓ תשובה מצוינת! ברורה, רגועה ומדויקת לתשאול ביטחוני בשדה התעופה.",
+                          "isOptimal": true
+                        },
+                        {
+                          "textEn": "A stranger in the street gave me this closed box to take on the plane.",
+                          "textHe": "אדם זר ברחוב נתן לי את הקופסה הסגורה הזו כדי להעלות למטוס.",
+                          "nextNodeId": "start",
+                          "feedbackHe": "✗ תשובה מסוכנת שתוביל לעיכוב ביטחוני מיידי! לעולם לא לוקחים חפצים מזרים לטיסה.",
+                          "isOptimal": false
+                        },
+                        {
+                          "textEn": "I am not know who putted things inside my bag.",
+                          "textHe": "אני לא יודע מי שם דברים בתוך התיק שלי.",
+                          "nextNodeId": "start",
+                          "feedbackHe": "✗ שתי שגיאות דקדוק ('I do not know', והפועל 'put' נשאר 'put' בעבר ולא 'putted').",
+                          "isOptimal": false
+                        }
+                      ]
+                    },
+                    {
+                      "id": "step2",
+                      "speakerName": "Security Officer",
+                      "speakerLineEn": "Do you have any laptops, power banks, or liquids over 100 milliliters inside your backpack?",
+                      "speakerLineHe": "האם יש לך מחשבים ניידים, סוללות גיבוי (פאוור-בנק) או נוזלים מעל 100 מיליליטר בתוך תיק הגב?",
+                      "options": [
+                        {
+                          "textEn": "I have my laptop and a portable charger. Shall I take them out and place them in a separate tray?",
+                          "textHe": "יש לי את הלפטופ ומטען נייד. האם להוציא אותם ולהניח אותם במגש נפרד?",
+                          "nextNodeId": "step3",
+                          "feedbackHe": "✓ מעולה! 'Portable charger' ו-'separate tray' (מגש נפרד) הם ביטויים שימושיים מאוד בבידוק.",
+                          "isOptimal": true
+                        },
+                        {
+                          "textEn": "Yes, I have three big bottles of water and soup inside.",
+                          "textHe": "כן, יש לי בפנים שלושה בקבוקים גדולים של מים ומרק.",
+                          "nextNodeId": "step2",
+                          "feedbackHe": "✗ בבידוק ביטחוני אסור להעביר נוזלים מעל 100 מ״ל בתיק היד.",
+                          "isOptimal": false
+                        },
+                        {
+                          "textEn": "Where I need to throw my computer?",
+                          "textHe": "איפה אני צריך לזרוק את המחשב שלי?",
+                          "nextNodeId": "step2",
+                          "feedbackHe": "✗ שגיאת תחביר ('Where do I need to') וטעות בפועל (אומרים 'place' או 'put' במגש, לא 'throw').",
+                          "isOptimal": false
+                        }
+                      ]
+                    },
+                    {
+                      "id": "step3",
+                      "speakerName": "Security Officer",
+                      "speakerLineEn": "Yes, place all electronics in the grey bin and empty your pockets before walking through the metal detector.",
+                      "speakerLineHe": "כן, הנח את כל מוצרי האלקטרוניקה במגש האפור ורוקן את הכיסים לפני שתעבור בגלאי המתכות.",
+                      "options": [
+                        {
+                          "textEn": "My pockets are completely empty. Should I also remove my belt and watch?",
+                          "textHe": "הכיסים שלי ריקים לחלוטין. האם עליי להסיר גם את החגורה והשעון?",
+                          "nextNodeId": "step4",
+                          "feedbackHe": "✓ אנגלית טבעית ומנומסת מאוד!",
+                          "isOptimal": true
+                        },
+                        {
+                          "textEn": "I keep my keys and coins in my pocket so the machine will sing.",
+                          "textHe": "אני משאיר את המפתחות והמטבעות בכיס כדי שהמכונה תשיר.",
+                          "nextNodeId": "step3",
+                          "feedbackHe": "✗ השארת מתכות בכיסים תפעיל את האזעקה של גלאי המתכות (metal detector).",
+                          "isOptimal": false
+                        },
+                        {
+                          "textEn": "Why you want to steal my watch?",
+                          "textHe": "למה אתה רוצה לגנוב את השעון שלי?",
+                          "nextNodeId": "step3",
+                          "feedbackHe": "✗ תגובה לא הולמת בבידוק ביטחוני ושגויה דקדוקית ('Why do you...').",
+                          "isOptimal": false
+                        }
+                      ]
+                    },
+                    {
+                      "id": "step4",
+                      "speakerName": "Security Officer",
+                      "speakerLineEn": "Please step forward. We need to swab your laptop for a quick trace test. It will only take thirty seconds.",
+                      "speakerLineHe": "אנא התקדם. אנחנו צריכים להעביר מטוש בדיקה מהיר על הלפטופ שלך. זה ייקח רק שלושים שניות.",
+                      "options": [
+                        {
+                          "textEn": "No problem at all, take your time. Let me know if you need me to unlock the screen.",
+                          "textHe": "אין שום בעיה, קח את הזמן. עדכן אותי אם תצטרך שאפתח את נעילת המסך.",
+                          "nextNodeId": "step5",
+                          "feedbackHe": "✓ תשובה רגועה, משתפת פעולה ומנוסחת היטב!",
+                          "isOptimal": true
+                        },
+                        {
+                          "textEn": "Don't touch my computer or I will shout very loud!",
+                          "textHe": "אל תיגע במחשב שלי או שאצעק חזק מאוד!",
+                          "nextNodeId": "step4",
+                          "feedbackHe": "✗ סירוב לבדיקת מטוש (swab test) בשדה תעופה ימנע ממך לעלות לטיסה.",
+                          "isOptimal": false
+                        }
+                      ]
+                    },
+                    {
+                      "id": "step5",
+                      "speakerName": "Security Officer",
+                      "speakerLineEn": "The test is clear. You can pack your belongings back into your bag. What gate is your flight departing from?",
+                      "speakerLineHe": "הבדיקה תקינה. אתה יכול לארוז חזרה את החפצים שלך לתיק. מאיזה שער הטיסה שלך ממריאה?",
+                      "options": [
+                        {
+                          "textEn": "Thank you, officer! My flight departs from Gate C14, and boarding starts in forty minutes.",
+                          "textHe": "תודה לך, אדוני השוטר! הטיסה שלי ממריאה משער C14, והעלייה למטוס מתחילה בעוד ארבעים דקות.",
+                          "nextNodeId": "ending",
+                          "feedbackHe": "✓ מושלם! 'Departs from Gate...' ו-'boarding starts' הם ביטויי תעופה מדויקים.",
+                          "isOptimal": true
+                        },
+                        {
+                          "textEn": "My airplane is flying from the roof yesterday.",
+                          "textHe": "המטוס שלי טס מהגג אתמול.",
+                          "nextNodeId": "step5",
+                          "feedbackHe": "✗ משפט חסר היגיון ושגוי בזמנים.",
+                          "isOptimal": false
+                        }
+                      ]
+                    },
+                    {
+                      "id": "ending",
+                      "speakerName": "Security Officer",
+                      "speakerLineEn": "Gate C14 is straight ahead to the right. Have a safe and pleasant flight!",
+                      "speakerLineHe": "שער C14 נמצא ישר ומימין. שתהיה לך טיסה בטוחה ונעימה!",
+                      "isEnding": true,
+                      "options": []
+                    }
+                  ]
+                }
+            """.trimIndent())
+        }
 
         if (isLondonApartment) {
             return JSONObject("""
@@ -343,13 +554,6 @@ class ConversationRepository(private val context: Context) {
                           "nextNodeId": "step2",
                           "feedbackHe": "✗ תשובה שתפסול אותך מיידית מבדיקת הרקע (Referencing) של הסוכנות.",
                           "isOptimal": false
-                        },
-                        {
-                          "textEn": "When the landlord will to move into my room?",
-                          "textHe": "מתי בעל הדירה יעבור לתוך החדר שלי?",
-                          "nextNodeId": "step2",
-                          "feedbackHe": "✗ שגיאת תחביר ('will to move') ואי הבנת המשפט: הסוכן שאל מתי אתה יכול להיכנס לדירה.",
-                          "isOptimal": false
                         }
                       ]
                     },
@@ -362,7 +566,7 @@ class ConversationRepository(private val context: Context) {
                         {
                           "textEn": "Will my deposit be protected in a government-approved scheme, and can we include a six-month break clause?",
                           "textHe": "האם הפיקדון שלי יהיה מוגן בתוכנית ממשלתית מאושרת, והאם נוכל לכלול סעיף יציאה אחרי חצי שנה?",
-                          "nextNodeId": "step4",
+                          "nextNodeId": "ending",
                           "feedbackHe": "✓ אלוף! 'Break clause' (סעיף יציאה) ו-'deposit protection scheme' הם מונחי מפתח בשכירות בלונדון.",
                           "isOptimal": true
                         },
@@ -372,72 +576,14 @@ class ConversationRepository(private val context: Context) {
                           "nextNodeId": "step3",
                           "feedbackHe": "✗ מלכודת מילים! 'Break clause' הוא סעיף יציאה מוקדמת מחוזה, לא שבירת חפצים.",
                           "isOptimal": false
-                        },
-                        {
-                          "textEn": "I give you cash in dark street without receipt.",
-                          "textHe": "אני נותן לך מזומן ברחוב חשוך בלי קבלה.",
-                          "nextNodeId": "step3",
-                          "feedbackHe": "✗ שגוי ומסוכן! פיקדון שכירות מפקידים רק לחשבון מוגן עם אסמכתא רשמית.",
-                          "isOptimal": false
-                        }
-                      ]
-                    },
-                    {
-                      "id": "step4",
-                      "speakerName": "London Estate Agent",
-                      "speakerLineEn": "Yes, the deposit goes straight to the Tenancy Deposit Scheme, and a 6-month break clause is fine. Do you have any questions about the inventory check?",
-                      "speakerLineHe": "כן, הפיקדון עובר ישירות לתוכנית הגנת הפיקדונות, וסעיף יציאה אחרי 6 חודשים מקובל. יש לך שאלות לגבי בדיקת המלאי ומצב הדירה?",
-                      "options": [
-                        {
-                          "textEn": "Yes, I want to make sure all existing marks on the walls are photographed during check-in so I won't be charged later.",
-                          "textHe": "כן, אני רוצה לוודא שכל הסימנים הקיימים על הקירות יצולמו בעת הכניסה כדי שלא אחויב עליהם בהמשך.",
-                          "nextNodeId": "step5",
-                          "feedbackHe": "✓ חשיבה צרכנית חכמה ואנגלית מדויקת ('so I won't be charged later').",
-                          "isOptimal": true
-                        },
-                        {
-                          "textEn": "I will paint the ceiling with black oil tomorrow.",
-                          "textHe": "אני אצבע את התקרה בשמן שחור מחר.",
-                          "nextNodeId": "step4",
-                          "feedbackHe": "✗ תשובה לא מתאימה לסיטואציה.",
-                          "isOptimal": false
-                        },
-                        {
-                          "textEn": "What is the price of the airplane ticket?",
-                          "textHe": "מה המחיר של כרטיס הטיסה?",
-                          "nextNodeId": "step4",
-                          "feedbackHe": "✗ לא קשור לנושא השיחה.",
-                          "isOptimal": false
-                        }
-                      ]
-                    },
-                    {
-                      "id": "step5",
-                      "speakerName": "London Estate Agent",
-                      "speakerLineEn": "An independent clerk will document every detail. How would you like to proceed with signing the tenancy agreement?",
-                      "speakerLineHe": "בודק עצמאי יתעד כל פרט. איך תרצה להתקדם עם החתימה על הסכם השכירות?",
-                      "options": [
-                        {
-                          "textEn": "Please email me the final draft of the tenancy agreement so I can review the clauses and sign it digitally today.",
-                          "textHe": "אנא שלח לי במייל את הטיוטה הסופית של הסכם השכירות כדי שאוכל לעבור על הסעיפים ולחתום דיגיטלית היום.",
-                          "nextNodeId": "ending",
-                          "feedbackHe": "✓ סגירת עסקה מושלמת ומקצועית!",
-                          "isOptimal": true
-                        },
-                        {
-                          "textEn": "I never read contracts, just take my wallet.",
-                          "textHe": "אני אף פעם לא קורא חוזים, פשוט קח את הארנק שלי.",
-                          "nextNodeId": "step5",
-                          "feedbackHe": "✗ תמיד מבקשים לעבור על הטיוטה ('review the final draft') לפני החתימה.",
-                          "isOptimal": false
                         }
                       ]
                     },
                     {
                       "id": "ending",
                       "speakerName": "London Estate Agent",
-                      "speakerLineEn": "Brilliant! I've just sent the contract to your inbox at the reduced rate of £1,950. Welcome to your new London home!",
-                      "speakerLineHe": "נהדר! שלחתי כעת את החוזה לתיבת המייל שלך בתעריף המופחת של 1,950 פאונד. ברוך הבא לביתך החדש בלונדון!",
+                      "speakerLineEn": "Brilliant! I've just sent the tenancy agreement to your inbox at the reduced rate of £1,950. Welcome to your new London home!",
+                      "speakerLineHe": "נהדר! שלחתי כעת את הסכם השכירות לתיבת המייל שלך בתעריף המופחת של 1,950 פאונד. ברוך הבא לביתך החדש בלונדון!",
                       "isEnding": true,
                       "options": []
                     }
@@ -446,25 +592,25 @@ class ConversationRepository(private val context: Context) {
             """.trimIndent())
         }
 
-        // תבנית דינמית חכמה שמייצרת שיחה ארוכה של 6 שלבים לכל נושא שהמשתמש מקליד
+        // תבנית דינמית חכמה ב-100% אנגלית טהורה עבור כל נושא חופשי אחר (ללא עברית בתוך האנגלית!)
         return JSONObject().apply {
             put("id", "ai_${System.currentTimeMillis()}")
             put("categoryHe", "שיחות AI ✨")
             put("titleHe", t)
-            put("titleEn", "Interactive AI Roleplay: $t")
+            put("titleEn", "Interactive English Roleplay Session")
             put("difficultyHe", difficultyHe)
 
             val nodes = JSONArray()
 
             nodes.put(JSONObject().apply {
                 put("id", "start")
-                put("speakerName", if (isDentistOrDoctor) "Specialist Doctor" else if (isBank) "Bank Advisor" else "Local Coordinator")
-                put("speakerLineEn", "Hello! Welcome. I understand you're here regarding your request ($t). Could you explain the exact details so I can help you right away?")
-                put("speakerLineHe", "שלום וברוך הבא! אני מבין שהגעת בנוגע ל-$t. תוכל להסביר לי את הפרטים המדויקים כדי שאוכל לעזור לך מיד?")
+                put("speakerName", if (isDentistOrDoctor) "Specialist Doctor" else if (isBank) "Bank Advisor" else "Service Coordinator")
+                put("speakerLineEn", "Hello and welcome! I understand you are here regarding an urgent matter today. Could you please explain the exact details so I can assist you right away?")
+                put("speakerLineHe", "שלום וברוך הבא! אני מבין שהגעת בנוגע לעניין חשוב היום ($t). האם תוכל להסביר את הפרטים המדויקים כדי שאוכל לסייע לך מיד?")
                 put("options", JSONArray().apply {
                     put(JSONObject().apply {
-                        put("textEn", "Hi! Thank you for seeing me. Let me explain my situation clearly and what I'm looking to resolve today.")
-                        put("textHe", "היי! תודה שקיבלת אותי. תן לי להסביר את המצב שלי בבירור ומה אני מבקש לפתור היום.")
+                        put("textEn", "Hi! Thank you for seeing me. Let me explain my situation clearly and what I am hoping to resolve today.")
+                        put("textHe", "היי! תודה שקיבלת אותי. תן לי להסביר את המצב שלי בבירור ומה אני מקווה לפתור היום.")
                         put("nextNodeId", "step2")
                         put("feedbackHe", "✓ פתיחה מנומסת, רהוטה וברורה מאוד באנגלית!")
                         put("isOptimal", true)
@@ -473,7 +619,7 @@ class ConversationRepository(private val context: Context) {
                         put("textEn", "I am not know why I am standing in this place now.")
                         put("textHe", "אני לא יודע למה אני עומד במקום הזה עכשיו.")
                         put("nextNodeId", "start")
-                        put("feedbackHe", "✗ שגיאת דקדוק כפולה! לא אומרים 'I am not know' אלא 'I do not know'.")
+                        put("feedbackHe", "✗ שגיאת דקדוק! באנגלית לא אומרים 'I am not know' אלא 'I do not know'.")
                         put("isOptimal", false)
                     })
                     put(JSONObject().apply {
@@ -489,12 +635,12 @@ class ConversationRepository(private val context: Context) {
             nodes.put(JSONObject().apply {
                 put("id", "step2")
                 put("speakerName", "Representative")
-                put("speakerLineEn", "I see what you mean. We have two options available: a standard service that takes three days, or an express priority option. Which do you prefer?")
-                put("speakerLineHe", "אני מבין למה אתה מתכוון. יש לנו שתי אפשרויות זמינות: שירות רגיל שלוקח שלושה ימים, או אפשרות אקספרס מהירה. מה אתה מעדיף?")
+                put("speakerLineEn", "I see what you mean. We have two options available: a standard procedure that takes three business days, or an express priority track. Which do you prefer?")
+                put("speakerLineHe", "אני מבין למה אתה מתכוון. יש לנו שתי אפשרויות זמינות: הליך רגיל שלוקח שלושה ימי עסקים, או מסלול אקספרס מהיר. מה אתה מעדיף?")
                 put("options", JSONArray().apply {
                     put(JSONObject().apply {
-                        put("textEn", "I'm on a tight schedule, so I'd prefer the express priority option. How much does it cost, and is there any extra fee?")
-                        put("textHe", "אני בלוח זמנים צפוף, לכן אעדיף את אפשרות האקספרס המהירה. כמה זה עולה והאם יש עמלה נוספת?")
+                        put("textEn", "I'm on a tight schedule, so I'd prefer the express priority track. How much does it cost, and is there any extra fee?")
+                        put("textHe", "אני בלוח זמנים צפוף, לכן אעדיף את מסלול האקספרס המהיר. כמה זה עולה והאם יש עמלה נוספת?")
                         put("nextNodeId", "step3")
                         put("feedbackHe", "✓ מעולה! 'On a tight schedule' (בלו״ז צפוף) הוא ביטוי טבעי ושימושי מאוד.")
                         put("isOptimal", true)
@@ -507,8 +653,7 @@ class ConversationRepository(private val context: Context) {
                         put("isOptimal", false)
                     })
                     put(JSONObject().apply {
-                        put("textEn", "Yes, I prefer yesterday morning.",
-                        )
+                        put("textEn", "Yes, I prefer yesterday morning.")
                         put("textHe", "כן, אני מעדיף את אתמול בבוקר.")
                         put("nextNodeId", "step2")
                         put("feedbackHe", "✗ תשובה חסרת היגיון שלא עונה לבחירה בין המסלולים.")
@@ -520,11 +665,11 @@ class ConversationRepository(private val context: Context) {
             nodes.put(JSONObject().apply {
                 put("id", "step3")
                 put("speakerName", "Representative")
-                put("speakerLineEn", "There is normally a $35 express fee, but since this is your first time with us, I can waive half of the fee if we complete the registration now.")
-                put("speakerLineHe", "בדרך כלל יש עמלת אקספרס של 35 דולר, אך מאחר שזו הפעם הראשונה שלך אצלנו, אוכל לוותר על מחצית מהעמלה אם נשלים את הרישום כעת.")
+                put("speakerLineEn", "There is normally a $35 express fee, but since this is your first visit, I can waive half of the fee if we complete the paperwork now.")
+                put("speakerLineHe", "בדרך כלל יש עמלת אקספרס של 35 דולר, אך מאחר שזה הביקור הראשון שלך, אוכל לוותר על מחצית מהעמלה אם נשלים את הטפסים כעת.")
                 put("options", JSONArray().apply {
                     put(JSONObject().apply {
-                        put("textEn", "I really appreciate that! What documents or identification do you need from me to finalize the process?")
+                        put("textEn", "I really appreciate that! What identification or documents do you need from me to finalize the process?")
                         put("textHe", "אני ממש מעריך את זה! אילו מסמכים או אמצעי זיהוי אתה צריך ממני כדי להשלים את התהליך?")
                         put("nextNodeId", "step4")
                         put("feedbackHe", "✓ מצוין! הבנת שהפועל 'waive' פירושו לוותר על עמלה/תשלום, והגבת בנימוס.")
@@ -537,48 +682,18 @@ class ConversationRepository(private val context: Context) {
                         put("feedbackHe", "✗ מלכודת מילים שנשמעות זהה (Homophones)! המילה 'waive' פירושה לוותר על תשלום/חוב, בעוד ש-'wave' היא לנופף ביד.")
                         put("isOptimal", false)
                     })
-                    put(JSONObject().apply {
-                        put("textEn", "No, I want to pay triple price because I hate discounts.")
-                        put("textHe", "לא, אני רוצה לשלם מחיר משולש כי אני שונא הנחות.")
-                        put("nextNodeId", "step3")
-                        put("feedbackHe", "✗ תשובה לא הגיונית בסיטואציה צרכנית.")
-                        put("isOptimal", false)
-                    })
                 })
             })
 
             nodes.put(JSONObject().apply {
                 put("id", "step4")
                 put("speakerName", "Representative")
-                put("speakerLineEn", "Just your passport and a local phone number or email address where we can send the confirmation receipt.")
-                put("speakerLineHe", "רק את הדרכון שלך ומספר טלפון או כתובת אימייל שבהם נוכל לשלוח את קבלת האישור.")
+                put("speakerLineEn", "Everything is entered into our system. Please review the summary on the screen and confirm that your contact details are accurate.")
+                put("speakerLineHe", "הכל הוזן למערכת שלנו. אנא עבור על הסיכום שעל המסך ואשר שפרטי הקשר שלך מדויקים.")
                 put("options", JSONArray().apply {
                     put(JSONObject().apply {
-                        put("textEn", "Here is my passport, and let me write down my email address clearly so there are no typos.")
-                        put("textHe", "הנה הדרכון שלי, ותן לי לרשום את כתובת האימייל שלי בבירור כדי שלא יהיו שגיאות הקלדה.")
-                        put("nextNodeId", "step5")
-                        put("feedbackHe", "✓ נהדר! 'Write down' (לרשום) ו-'typos' (שגיאות הקלדה) הם מונחים מעולים.")
-                        put("isOptimal", true)
-                    })
-                    put(JSONObject().apply {
-                        put("textEn", "My passport is swimming in the ocean right now.")
-                        put("textHe", "הדרכון שלי שוחה באוקיינוס כרגע.")
-                        put("nextNodeId", "step4")
-                        put("feedbackHe", "✗ תשובה אבסורדית שלא מאפשרת להתקדם ברישום.")
-                        put("isOptimal", false)
-                    })
-                })
-            })
-
-            nodes.put(JSONObject().apply {
-                put("id", "step5")
-                put("speakerName", "Representative")
-                put("speakerLineEn", "Everything is entered into the system. Please review the summary on the screen and confirm if all the details are accurate.")
-                put("speakerLineHe", "הכל הוזן למערכת. אנא עבור על הסיכום שעל המסך ואשר אם כל הפרטים מדויקים.")
-                put("options", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("textEn", "I've double-checked the spelling of my name and contact info—everything looks completely accurate!")
-                        put("textHe", "בדקתי פעמיים את איות השם ופרטי הקשר שלי — הכל נראה מדויק לחלוטין!")
+                        put("textEn", "I've double-checked the spelling of my name and email address—everything looks completely accurate!")
+                        put("textHe", "בדקתי פעמיים את איות השם וכתובת האימייל שלי — הכל נראה מדויק לחלוטין!")
                         put("nextNodeId", "ending")
                         put("feedbackHe", "✓ מושלם! 'Double-checked' הוא ביטוי מצוין לאימות פרטים.")
                         put("isOptimal", true)
@@ -586,7 +701,7 @@ class ConversationRepository(private val context: Context) {
                     put(JSONObject().apply {
                         put("textEn", "The screen is made of glass and plastic.")
                         put("textHe", "המסך עשוי מזכוכית ופלסטיק.")
-                        put("nextNodeId", "step5")
+                        put("nextNodeId", "step4")
                         put("feedbackHe", "✗ לא ענית לבקשה לאשר את נכונות הפרטים על המסך.")
                         put("isOptimal", false)
                     })
@@ -596,9 +711,10 @@ class ConversationRepository(private val context: Context) {
             nodes.put(JSONObject().apply {
                 put("id", "ending")
                 put("speakerName", "Representative")
-                put("speakerLineEn", "All set! Your confirmation has been sent to your email. Thank you, and have a wonderful day!")
-                put("speakerLineHe", "הכל מוכן! האישור שלך נשלח לאימייל. תודה רבה ושיהיה לך יום נפלא!")
-                put("isEnding", true)
+                put("speakerLineEn", "All set! Your official confirmation has been sent to your email. Thank you, and have a wonderful day!")
+                put("speakerLineHe", "הכל מוכן! האישור הרשמי שלך נשלח לאימייל. תודה רבה ושיהיה לך יום נפלא!")
+                put("isEnding", true,
+                )
                 put("options", JSONArray())
             })
 
@@ -606,21 +722,22 @@ class ConversationRepository(private val context: Context) {
         }
     }
 
-    // 1. יצירת תרחיש שיחה שלם וארוך באמצעות ה-AI (עם הגנה מלאה מפני Timeout!)
-    suspend fun generateOnlineAiScenario(topicPrompt: String, difficultyHe: String): Result<ConversationScenario> {
-        return runCatching {
+    suspend fun generateOnlineAiScenario(topicPrompt: String, difficultyHe: String): Result<ConversationScenario> = withContext(Dispatchers.IO) {
+        runCatching {
             val onlineAttempt = runCatching {
                 val systemPrompt = """
                     Return ONLY raw valid JSON (no markdown) for a 5-stage English roleplay scenario for Hebrew speakers.
-                    Nodes: "start", "step2", "step3", "step4", "ending".
-                    Each non-ending node must have 3 options: 1 with "isOptimal": true ("nextNodeId" -> next step) and 2 with "isOptimal": false ("nextNodeId" -> same step, grammar/context trap).
-                    Include Hebrew "feedbackHe" ("✓ ..." or "✗ ...").
+                    IMPORTANT RULES:
+                    1. "speakerLineEn" and "textEn" MUST be 100% pure English (NEVER put Hebrew words inside English sentences).
+                    2. Every node MUST have a complete Hebrew translation in "speakerLineHe", and every option MUST have a complete Hebrew translation in "textHe".
+                    3. Nodes: "start", "step2", "step3", "step4", "ending".
+                    4. Each non-ending node must have 3 options: 1 with "isOptimal": true ("nextNodeId" -> next step) and 2 with "isOptimal": false ("nextNodeId" -> same step).
                 """.trimIndent()
 
                 val userPrompt = """
                     Topic: "$topicPrompt", Difficulty: "$difficultyHe".
                     JSON format:
-                    {"id":"ai_1","categoryHe":"שיחות AI ✨","titleHe":"...","titleEn":"...","difficultyHe":"$difficultyHe","nodes":[{"id":"start","speakerName":"...","speakerLineEn":"...","speakerLineHe":"...","isEnding":false,"options":[{"textEn":"...","textHe":"...","nextNodeId":"step2","feedbackHe":"✓ ...","isOptimal":true},{"textEn":"...","textHe":"...","nextNodeId":"start","feedbackHe":"✗ ...","isOptimal":false}]},{"id":"ending","speakerName":"...","speakerLineEn":"...","speakerLineHe":"...","isEnding":true,"options":[]}]}
+                    {"id":"ai_1","categoryHe":"שיחות AI ✨","titleHe":"$topicPrompt","titleEn":"English Roleplay","difficultyHe":"$difficultyHe","nodes":[{"id":"start","speakerName":"Officer","speakerLineEn":"Pure English sentence...","speakerLineHe":"תרגום מלא לעברית...","isEnding":false,"options":[{"textEn":"Pure English correct response...","textHe":"תרגום לעברית...","nextNodeId":"step2","feedbackHe":"✓ הסבר בעברית","isOptimal":true},{"textEn":"Pure English wrong response...","textHe":"תרגום לעברית...","nextNodeId":"start","feedbackHe":"✗ הסבר בעברית","isOptimal":false}]},{"id":"ending","speakerName":"Officer","speakerLineEn":"Pure English closing...","speakerLineHe":"תרגום סיום לעברית...","isEnding":true,"options":[]}]}
                 """.trimIndent()
 
                 val responseText = requestAiJson(systemPrompt, userPrompt)
@@ -630,10 +747,10 @@ class ConversationRepository(private val context: Context) {
                 if (jsonObj.optString("titleHe").isBlank()) {
                     jsonObj.put("titleHe", topicPrompt)
                 }
+                enrichMissingHebrewTranslations(jsonObj)
                 jsonObj
             }
 
-            // אם שרת ה-AI החיצוני החזיר תשובה בזמן - נשתמש בה; אם היה Timeout - נפעיל מיד את המנוע החכם המובנה!
             val finalJsonObj = onlineAttempt.getOrElse {
                 buildSmartDynamicScenarioJson(topicPrompt, difficultyHe)
             }
@@ -647,18 +764,17 @@ class ConversationRepository(private val context: Context) {
         }
     }
 
-    // 2. הוספת אפשרויות תשובה חדשות לשלב קיים בשיחה בזמן אמת (עם גיבוי מיידי ללא Timeout)
     suspend fun generateExtraAiOptionsForNode(
         node: DialogueNode,
         nextTargetNodeId: String
-    ): Result<List<DialogueOption>> {
-        return runCatching {
+    ): Result<List<DialogueOption>> = withContext(Dispatchers.IO) {
+        runCatching {
             val onlineAttempt = runCatching {
-                val systemPrompt = "Return ONLY a valid JSON array of 2 English response options for Hebrew speakers: 1 optimal (true) and 1 grammar mistake trap (false)."
+                val systemPrompt = "Return ONLY a valid JSON array of 2 pure English response options for Hebrew speakers (with full Hebrew 'textHe' and 'feedbackHe'): 1 optimal (true) and 1 grammar mistake trap (false)."
                 val userPrompt = """
                     Speaker (${node.speakerName}) says: "${node.speakerLineEn}"
                     JSON array format:
-                    [{"textEn":"...","textHe":"...","nextNodeId":"$nextTargetNodeId","feedbackHe":"✓ ...","isOptimal":true},{"textEn":"...","textHe":"...","nextNodeId":"${node.id}","feedbackHe":"✗ ...","isOptimal":false}]
+                    [{"textEn":"Pure English...","textHe":"תרגום לעברית...","nextNodeId":"$nextTargetNodeId","feedbackHe":"✓ ...","isOptimal":true},{"textEn":"Pure English mistake...","textHe":"תרגום לעברית...","nextNodeId":"${node.id}","feedbackHe":"✗ ...","isOptimal":false}]
                 """.trimIndent()
 
                 val responseText = requestAiJson(systemPrompt, userPrompt)
@@ -667,22 +783,30 @@ class ConversationRepository(private val context: Context) {
                 for (i in 0 until arr.length()) {
                     val o = arr.optJSONObject(i) ?: continue
                     val isOpt = o.optBoolean("isOptimal", false)
-                    list.add(
-                        DialogueOption(
-                            textEn = o.optString("textEn").trim(),
-                            textHe = o.optString("textHe").trim(),
-                            nextNodeId = if (isOpt) nextTargetNodeId else node.id,
-                            feedbackHe = o.optString("feedbackHe").trim(),
-                            isOptimal = isOpt
+                    val en = sanitizeEnglishOnly(o.optString("textEn").trim(), "")
+                    var he = o.optString("textHe").trim()
+                    if (en.isNotEmpty() && he.isEmpty()) {
+                        he = translateEnToHeFallback(en)
+                    }
+                    if (en.isNotEmpty()) {
+                        list.add(
+                            DialogueOption(
+                                textEn = en,
+                                textHe = he,
+                                nextNodeId = if (isOpt) nextTargetNodeId else node.id,
+                                feedbackHe = o.optString("feedbackHe").ifBlank {
+                                    if (isOpt) "✓ תשובה חלופית מצוינת!" else "✗ שגיאת דקדוק או הקשר."
+                                }.trim(),
+                                isOptimal = isOpt
+                            )
                         )
-                    )
+                    }
                 }
                 if (list.isEmpty()) throw IllegalStateException("Empty options")
                 list
             }
 
             onlineAttempt.getOrElse {
-                // גיבוי מיידי שמוסיף תשובות חכמות ומסיחים דקדוקיים בלי להיכשל ב-Timeout
                 val baseOptimal = node.options.firstOrNull { it.isOptimal }
                 listOf(
                     DialogueOption(
