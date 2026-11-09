@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- הרשאת חיבור לאינטרנט עבור מודל ה-AI המקוון שמייצר שיחות ותשובות חדשות -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- חובה באנדרואיד 11+ (API 30+) כדי שמנוע ההקראה הקולית (TTS) יזוהה ויעבוד -->
     <queries>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
