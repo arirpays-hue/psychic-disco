@@ -14,11 +14,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,14 +50,30 @@ fun ConversationScreen(
 ) {
     val scope = rememberCoroutineScope()
 
+    var allScenarios by remember(scenarios) { mutableStateOf(scenarios) }
     var selectedCategory by remember { mutableStateOf("הכל") }
     var activeScenario by remember { mutableStateOf<ConversationScenario?>(null) }
     var currentNodeId by remember { mutableStateOf("start") }
     var stepNumber by remember { mutableIntStateOf(1) }
 
+    // זרע ערבוב שמשתנה בכל שלב, בכל אתחול ובכל טעות כדי שהתשובות יתערבבו מחדש!
+    var shuffleSeed by remember { mutableIntStateOf(0) }
+
+    // תוספת תשובות דינמית שנוצרה על ידי ה-AI עבור השלב הנוכחי
+    var aiAddedOptionsMap by remember { mutableStateOf>>(emptyMap()) }
+    var isGeneratingMoreOptions by remember { mutableStateOf(false) }
+
+    // דיאלוג יצירת שיחה חדשה ב-AI
+    var showAiGeneratorDialog by remember { mutableStateOf(false) }
+    var showApiKeyDialog by remember { mutableStateOf(false) }
+    var aiTopicInput by remember { mutableStateOf("") }
+    var aiDifficultySelected by remember { mutableStateOf("בינוני-מתקדם") }
+    var isGeneratingScenario by remember { mutableStateOf(false) }
+    var aiStatusMessage by remember { mutableStateOf<String?>(null) }
+
     var livesRemaining by remember { mutableIntStateOf(3) }
     var scorePoints by remember { mutableIntStateOf(0) }
-    var wrongIndicesInCurrentNode by remember { mutableStateOf(setOf<Int>()) }
+    var wrongTextsInCurrentNode by remember { mutableStateOf(setOf<String>()) }
 
     var showHebrewTranslation by remember { mutableStateOf(false) }
     var lastFeedback by remember { mutableStateOf<String?>(null) }
@@ -72,18 +91,18 @@ fun ConversationScreen(
         }
     }
 
-    val categories = remember(scenarios) {
-        listOf("הכל") + scenarios.map { it.categoryHe }.distinct()
+    val categories = remember(allScenarios) {
+        listOf("הכל") + allScenarios.map { it.categoryHe }.distinct()
     }
 
-    val filteredScenarios = remember(scenarios, selectedCategory) {
-        if (selectedCategory == "הכל") scenarios
-        else scenarios.filter { it.categoryHe == selectedCategory }
+    val filteredScenarios = remember(allScenarios, selectedCategory) {
+        if (selectedCategory == "הכל") allScenarios
+        else allScenarios.filter { it.categoryHe == selectedCategory }
     }
 
-    // הקראה אוטומטית של משפט הדובר בכל שלב חדש
     LaunchedEffect(activeScenario?.id, currentNodeId) {
-        wrongIndicesInCurrentNode = emptySet()
+        wrongTextsInCurrentNode = emptySet()
+        shuffleSeed++ // מערבב את סדר התשובות בכל כניסה לשלב
         val node = activeScenario?.nodes?.get(currentNodeId)
         if (node != null) {
             onSpeakEnglish(node.speakerLineEn)
@@ -118,9 +137,12 @@ fun ConversationScreen(
                     Icon(Icons.Default.Menu, contentDescription = "תפריט", tint = TealNeon)
                 }
 
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                ) {
                     Text(
-                        text = if (activeScenario == null) "סימולציות שיחה (Roleplay)" else activeScenario!!.titleHe,
+                        text = if (activeScenario == null) "סימולציות שיחה + AI" else activeScenario!!.titleHe,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White,
@@ -150,14 +172,48 @@ fun ConversationScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "חזור לרשימה", tint = PurpleNeon)
                     }
                 } else {
-                    Spacer(modifier = Modifier.size(44.dp))
+                    IconButton(
+                        onClick = { showApiKeyDialog = true },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(CardDark)
+                            .border(1.dp, StarGold.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "הגדרות מנוע AI", tint = StarGold)
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             if (activeScenario == null) {
-                // --- מסך בחירת תרחיש שיחה ---
+                // --- כפתור יצירת שיחה חדשה באמצעות מודל AI מקוון ---
+                Button(
+                    onClick = {
+                        aiStatusMessage = null
+                        showAiGeneratorDialog = true
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .border(1.5.dp, PurpleNeon, RoundedCornerShape(18.dp)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1F1638))
+                ) {
+                    Icon(Icons.Default.Star, contentDescription = null, tint = StarGold)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "✨ צור שיחה חדשה בהתאמה אישית עם AI (מקוון)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // סרגל קטגוריות
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -186,8 +242,9 @@ fun ConversationScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
+                // רשימת כל תרחישי השיחה
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
@@ -203,7 +260,11 @@ fun ConversationScreen(
                                 .fillMaxWidth()
                                 .border(
                                     1.5.dp,
-                                    if (isDone) CheckNeon else TealNeon.copy(alpha = 0.45f),
+                                    when {
+                                        isDone -> CheckNeon
+                                        scenario.isAiGenerated -> PurpleNeon
+                                        else -> TealNeon.copy(alpha = 0.45f)
+                                    },
                                     RoundedCornerShape(20.dp)
                                 )
                                 .clickable {
@@ -214,6 +275,7 @@ fun ConversationScreen(
                                     scorePoints = 0
                                     lastFeedback = null
                                     showHebrewTranslation = false
+                                    shuffleSeed++ // ערבוב חדש בכל פתיחת שיחה
                                 },
                             shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(containerColor = CardDark)
@@ -230,11 +292,14 @@ fun ConversationScreen(
                                         Text(
                                             text = scenario.categoryHe,
                                             fontSize = 11.sp,
-                                            color = PurpleNeon,
+                                            color = if (scenario.isAiGenerated) StarGold else PurpleNeon,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(8.dp))
-                                                .background(PurpleNeon.copy(alpha = 0.15f))
+                                                .background(
+                                                    if (scenario.isAiGenerated) StarGold.copy(alpha = 0.18f)
+                                                    else PurpleNeon.copy(alpha = 0.15f)
+                                                )
                                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
@@ -280,13 +345,15 @@ fun ConversationScreen(
                 val scenario = activeScenario!!
                 val node = scenario.nodes[currentNodeId] ?: scenario.nodes.values.first()
                 val totalStages = (scenario.nodes.size - 1).coerceAtLeast(1)
+                val nodeKey = "${scenario.id}_${node.id}"
+                val extraAiOptions = aiAddedOptionsMap[nodeKey].orEmpty()
 
-                // מערבב את התשובות אקראית בכל שלב כדי שהתשובה הנכונה לא תהיה תמיד באותו מקום!
-                val shuffledOptions = remember(scenario.id, currentNodeId) {
-                    node.options.shuffled()
+                // ערבוב מחדש בכל פעם ש-shuffleSeed או מספר התשובות משתנה!
+                val shuffledOptions = remember(scenario.id, currentNodeId, shuffleSeed, extraAiOptions.size) {
+                    (node.options + extraAiOptions).distinctBy { it.textEn.lowercase() }.shuffled()
                 }
 
-                // שורת לבבות (חיים) ומד התקדמות בשיחה
+                // שורת לבבות, כפתור ערבוב ומד התקדמות
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -321,7 +388,6 @@ fun ConversationScreen(
                 }
 
                 if (livesRemaining <= 0) {
-                    // --- מסך כישלון בשיחה (Game Over) כשנגמרו 3 הלבבות ---
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Card(
                             modifier = Modifier
@@ -334,10 +400,15 @@ fun ConversationScreen(
                                 modifier = Modifier.padding(24.dp).fillMaxWidth(),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text("💔 השיחה הסתיימה ללא הצלחה", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = ErrorCrimson)
+                                Text(
+                                    text = "💔 השיחה הסתיימה ללא הצלחה",
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = ErrorCrimson
+                                )
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Text(
-                                    text = lastFeedback ?: "בצעת 3 טעויות בשיחה זו. קרא את ההסברים ונסה שוב מהתחלה!",
+                                    text = lastFeedback ?: "ביצעת 3 טעויות. האפשרויות יתערבבו מחדש בניסיון הבא!",
                                     fontSize = 15.sp,
                                     color = Color.LightGray,
                                     textAlign = TextAlign.Center
@@ -350,14 +421,15 @@ fun ConversationScreen(
                                         livesRemaining = 3
                                         scorePoints = 0
                                         lastFeedback = null
-                                        wrongIndicesInCurrentNode = emptySet()
+                                        wrongTextsInCurrentNode = emptySet()
+                                        shuffleSeed++ // מערבב מחדש הכל כדי שלא יזכרו מיקומים
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = TealDark),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Icon(Icons.Default.Refresh, contentDescription = null, tint = TealNeon)
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("התחל את השיחה מחדש", color = TealNeon, fontWeight = FontWeight.Bold)
+                                    Text("נסה שוב (בסדר תשובות מעורבב חדש)", color = TealNeon, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -374,7 +446,7 @@ fun ConversationScreen(
                                 .fillMaxWidth()
                                 .offset { IntOffset(shakeOffsetX.value.roundToInt(), 0) }
                         ) {
-                            // משוב מפורט על הבחירה האחרונה (ירוק לתשובה נכונה, אדום לשגיאה)
+                            // משוב מפורט
                             AnimatedVisibility(
                                 visible = lastFeedback != null,
                                 enter = expandVertically() + fadeIn(),
@@ -405,7 +477,7 @@ fun ConversationScreen(
                                 }
                             }
 
-                            // בועת הדיבור של הדמות מולה משוחחים
+                            // בועת הדיבור של הדמות
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -482,10 +554,9 @@ fun ConversationScreen(
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(18.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
                             if (node.isEnding) {
-                                // סיום מוצלח של השיחה הארוכה
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -497,9 +568,18 @@ fun ConversationScreen(
                                         modifier = Modifier.padding(22.dp).fillMaxWidth(),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        Text("🏆 השלמת את כל שלבי השיחה!", fontSize = 21.sp, fontWeight = FontWeight.ExtraBold, color = CheckNeon)
+                                        Text(
+                                            text = "🏆 השלמת את כל שלבי השיחה!",
+                                            fontSize = 21.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = CheckNeon
+                                        )
                                         Spacer(modifier = Modifier.height(6.dp))
-                                        Text("ניקוד סופי: $scorePoints • לבבות שנותרו: $livesRemaining/3", fontSize = 14.sp, color = StarGold)
+                                        Text(
+                                            text = "ניקוד סופי: $scorePoints • לבבות שנותרו: $livesRemaining/3",
+                                            fontSize = 14.sp,
+                                            color = StarGold
+                                        )
                                         Spacer(modifier = Modifier.height(16.dp))
                                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                             Button(
@@ -509,12 +589,13 @@ fun ConversationScreen(
                                                     livesRemaining = 3
                                                     scorePoints = 0
                                                     lastFeedback = null
+                                                    shuffleSeed++ // ערבוב חדש
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = TealDark)
                                             ) {
                                                 Icon(Icons.Default.Refresh, contentDescription = null, tint = TealNeon)
                                                 Spacer(modifier = Modifier.width(6.dp))
-                                                Text("שחק שוב", color = TealNeon)
+                                                Text("שחק שוב (מעורבב)", color = TealNeon)
                                             }
                                             Button(
                                                 onClick = {
@@ -529,16 +610,65 @@ fun ConversationScreen(
                                     }
                                 }
                             } else {
-                                Text(
-                                    text = "בחר את התגובה הנכונה באנגלית (רק תשובה אחת מתאימה!):",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.LightGray,
-                                    modifier = Modifier.padding(bottom = 10.dp)
-                                )
+                                // כותרת אפשרויות + כפתור הוספת תשובות מה-AI המקוון
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "בחר את התגובה הנכונה (מתערבב בכל ניסיון):",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.LightGray
+                                    )
 
-                                shuffledOptions.forEachIndexed { index, option ->
-                                    val isAlreadyMarkedWrong = wrongIndicesInCurrentNode.contains(index)
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (!isGeneratingMoreOptions) {
+                                                isGeneratingMoreOptions = true
+                                                val optimalNextId = node.options.firstOrNull { it.isOptimal }?.nextNodeId ?: "start"
+                                                scope.launch {
+                                                    val res = repository.generateExtraAiOptionsForNode(node, optimalNextId)
+                                                    isGeneratingMoreOptions = false
+                                                    res.onSuccess { newOpts ->
+                                                        val currentExtra = aiAddedOptionsMap[nodeKey].orEmpty()
+                                                        aiAddedOptionsMap = aiAddedOptionsMap + (nodeKey to (currentExtra + newOpts))
+                                                        shuffleSeed++
+                                                        lastChoiceOptimal = true
+                                                        lastFeedback = "✨ מודל ה-AI הוסיף ${newOpts.size} אפשרויות חדשות וערבב את הרשימה!"
+                                                    }.onFailure {
+                                                        lastChoiceOptimal = false
+                                                        lastFeedback = "שגיאת חיבור ל-AI המקוון. בדוק חיבור אינטרנט."
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(32.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, PurpleNeon)
+                                    ) {
+                                        if (isGeneratingMoreOptions) {
+                                            CircularProgressIndicator(
+                                                color = PurpleNeon,
+                                                strokeWidth = 2.dp,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = null,
+                                                tint = PurpleNeon,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("תשובות AI", fontSize = 11.sp, color = PurpleNeon)
+                                        }
+                                    }
+                                }
+
+                                shuffledOptions.forEach { option ->
+                                    val isAlreadyMarkedWrong = wrongTextsInCurrentNode.contains(option.textEn)
 
                                     Card(
                                         modifier = Modifier
@@ -555,14 +685,14 @@ fun ConversationScreen(
                                                 lastChoiceOptimal = option.isOptimal
 
                                                 if (option.isOptimal) {
-                                                    // תשובה נכונה! מתקדמים לשלב הבא בשיחה
-                                                    scorePoints += if (wrongIndicesInCurrentNode.isEmpty()) 20 else 10
+                                                    scorePoints += if (wrongTextsInCurrentNode.isEmpty()) 25 else 10
                                                     stepNumber++
                                                     currentNodeId = option.nextNodeId
                                                 } else {
-                                                    // תשובה שגויה! יורד לב, הכרטיס רועד, ונשארים באותו שלב לניסיון נוסף
-                                                    wrongIndicesInCurrentNode = wrongIndicesInCurrentNode + index
+                                                    // טעות! מסמן את הטקסט השגוי, מוריד לב, ומערבב מיד את כל הכרטיסים מחדש!
+                                                    wrongTextsInCurrentNode = wrongTextsInCurrentNode + option.textEn
                                                     livesRemaining--
+                                                    shuffleSeed++ // ערבוב מיידי כדי שלא ינחשו לפי מיקום קודם
                                                     triggerErrorShake()
                                                 }
                                             },
@@ -612,6 +742,203 @@ fun ConversationScreen(
                     }
                 }
             }
+        }
+
+        // --- דיאלוג יצירת שיחה חדשה באמצעות מודל AI מקוון ---
+        if (showAiGeneratorDialog) {
+            val quickTopics = listOf(
+                "בדיקה ביטחונית ותשאול מעמיק בשדה תעופה",
+                "ראיון עבודה לחברת סייבר והייטק",
+                "הזמנת אוכל במסעדת שף והחזרת מנה",
+                "התמקחות על שכירת דירה בלונדון",
+                "פנייה לרופא שיניים בחירום בחו״ל",
+                "פתיחת חשבון בנק והנפקת כרטיס אשראי"
+            )
+
+            AlertDialog(
+                onDismissRequest = { if (!isGeneratingScenario) showAiGeneratorDialog = false },
+                containerColor = CardDark,
+                title = {
+                    Text(
+                        text = "✨ מחולל שיחות AI מקוון",
+                        color = TealNeon,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 20.sp
+                    )
+                },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "הקלד כל סיטואציה שתרצה לתרגל, או בחר נושא מהיר. מודל ה-AI יבנה שיחה ארוכה בת 6 שלבים עם תשובה נכונה ומלכודות דקדוק:",
+                            color = Color.LightGray,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = aiTopicInput,
+                            onValueChange = { aiTopicInput = it },
+                            placeholder = { Text("למשל: החלפת מוצר פגום בחנות בארה״ב...", color = Color.Gray) },
+                            singleLine = false,
+                            maxLines = 2,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = TealNeon,
+                                unfocusedBorderColor = Color.Gray
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("או לחץ על נושא מהיר:", color = StarGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(quickTopics) { topic ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(TealDark)
+                                        .border(1.dp, TealNeon.copy(0.5f), RoundedCornerShape(10.dp))
+                                        .clickable { aiTopicInput = topic }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(topic, color = Color.White, fontSize = 11.sp)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("בינוני", "בינוני-מתקדם", "מתקדם מאוד").forEach { diff ->
+                                val selected = aiDifficultySelected == diff
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (selected) PurpleNeon.copy(0.25f) else DarkBg)
+                                        .border(1.dp, if (selected) PurpleNeon else Color.Gray.copy(0.3f), RoundedCornerShape(10.dp))
+                                        .clickable { aiDifficultySelected = diff }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(diff, color = if (selected) PurpleNeon else Color.LightGray, fontSize = 11.sp)
+                                }
+                            }
+                        }
+
+                        if (isGeneratingScenario) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                CircularProgressIndicator(color = TealNeon, modifier = Modifier.size(22.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text("מודל ה-AI בונה שיחה ארוכה ומאתגרת...", color = TealNeon, fontSize = 13.sp)
+                            }
+                        }
+
+                        if (aiStatusMessage != null) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(aiStatusMessage!!, color = ErrorCrimson, fontSize = 12.sp)
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        enabled = !isGeneratingScenario,
+                        onClick = {
+                            val chosenTopic = aiTopicInput.ifBlank { quickTopics.random() }
+                            isGeneratingScenario = true
+                            aiStatusMessage = null
+                            scope.launch {
+                                val result = repository.generateOnlineAiScenario(chosenTopic, aiDifficultySelected)
+                                isGeneratingScenario = false
+                                result.onSuccess { newScenario ->
+                                    allScenarios = listOf(newScenario) + allScenarios
+                                    showAiGeneratorDialog = false
+                                    aiTopicInput = ""
+                                    // פותח מיד את השיחה החדשה שה-AI יצר!
+                                    activeScenario = newScenario
+                                    currentNodeId = "start"
+                                    stepNumber = 1
+                                    livesRemaining = 3
+                                    scorePoints = 0
+                                    lastFeedback = null
+                                    shuffleSeed++
+                                }.onFailure { err ->
+                                    aiStatusMessage = "שגיאה ביצירת השיחה: ודא חיבור לאינטרנט או נסה שוב (${err.localizedMessage ?: "Timeout"})."
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = TealDark)
+                    ) {
+                        Text("צור שיחה עכשיו", color = TealNeon, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        enabled = !isGeneratingScenario,
+                        onClick = { showAiGeneratorDialog = false }
+                    ) {
+                        Text("ביטול", color = Color.LightGray)
+                    }
+                }
+            )
+        }
+
+        // --- דיאלוג הגדרת מפתח API אופציונלי (Gemini / OpenRouter) ---
+        if (showApiKeyDialog) {
+            var apiKeyInput by remember { mutableStateOf(repository.getCustomApiKey()) }
+            AlertDialog(
+                onDismissRequest = { showApiKeyDialog = false },
+                containerColor = CardDark,
+                title = {
+                    Text("הגדרות מנוע AI מקוון", color = StarGold, fontWeight = FontWeight.Bold)
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = "האפליקציה מחוברת כברירת מחדל למנוע AI מקוון חינמי ללא צורך במפתח.\nאם תרצה לחבר מפתח אישי של Google Gemini (AIza...) או OpenRouter (sk-or...), תוכל להזין אותו כאן:",
+                            color = Color.LightGray,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = apiKeyInput,
+                            onValueChange = { apiKeyInput = it },
+                            placeholder = { Text("השאר ריק לשימוש במנוע החינמי המובנה", color = Color.Gray) },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = StarGold,
+                                unfocusedBorderColor = Color.Gray
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            repository.saveCustomApiKey(apiKeyInput)
+                            showApiKeyDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = TealDark)
+                    ) {
+                        Text("שמור", color = TealNeon)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showApiKeyDialog = false }) {
+                        Text("סגור", color = Color.LightGray)
+                    }
+                }
+            )
         }
     }
 }
