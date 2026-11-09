@@ -1,14 +1,19 @@
 package com.example.englishtutor
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -91,18 +96,18 @@ fun ConversationScreen(
         }
     }
 
-    val categories = remember(allScenarios) {
+    val categories: List<String> = remember(allScenarios) {
         listOf("הכל") + allScenarios.map { it.categoryHe }.distinct()
     }
 
-    val filteredScenarios = remember(allScenarios, selectedCategory) {
+    val filteredScenarios: List<ConversationScenario> = remember(allScenarios, selectedCategory) {
         if (selectedCategory == "הכל") allScenarios
         else allScenarios.filter { it.categoryHe == selectedCategory }
     }
 
     LaunchedEffect(activeScenario?.id, currentNodeId) {
         wrongTextsInCurrentNode = emptySet()
-        shuffleSeed++ // מערבב את סדר התשובות בכל כניסה לשלב
+        shuffleSeed++
         val node = activeScenario?.nodes?.get(currentNodeId)
         if (node != null) {
             onSpeakEnglish(node.speakerLineEn)
@@ -213,12 +218,14 @@ fun ConversationScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // סרגל קטגוריות
-                LazyRow(
+                // סרגל קטגוריות בגלילה אופקית בטוחה
+                Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                 ) {
-                    items(categories) { category ->
+                    for (category in categories) {
                         val isSelected = selectedCategory == category
                         Box(
                             modifier = Modifier
@@ -244,12 +251,14 @@ fun ConversationScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // רשימת כל תרחישי השיחה
-                LazyColumn(
+                // רשימת תרחישי השיחה בגלילה אנכית חלקה
+                Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    items(filteredScenarios, key = { it.id }) { scenario ->
+                    for (scenario in filteredScenarios) {
                         val isDone = remember(completionRefresh, scenario.id) {
                             repository.isScenarioCompleted(scenario.id)
                         }
@@ -275,7 +284,7 @@ fun ConversationScreen(
                                     scorePoints = 0
                                     lastFeedback = null
                                     showHebrewTranslation = false
-                                    shuffleSeed++ // ערבוב חדש בכל פתיחת שיחה
+                                    shuffleSeed++
                                 },
                             shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(containerColor = CardDark)
@@ -339,6 +348,7 @@ fun ConversationScreen(
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             } else {
                 // --- מסך ניהול השיחה החיה ---
@@ -349,11 +359,11 @@ fun ConversationScreen(
                 val extraAiOptions = aiAddedOptionsMap[nodeKey].orEmpty()
 
                 // ערבוב מחדש בכל פעם ש-shuffleSeed או מספר התשובות משתנה!
-                val shuffledOptions = remember(scenario.id, currentNodeId, shuffleSeed, extraAiOptions.size) {
+                val shuffledOptions: List<DialogueOption> = remember(scenario.id, currentNodeId, shuffleSeed, extraAiOptions.size) {
                     (node.options + extraAiOptions).distinctBy { it.textEn.lowercase() }.shuffled()
                 }
 
-                // שורת לבבות, כפתור ערבוב ומד התקדמות
+                // שורת לבבות ומד התקדמות
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -422,7 +432,7 @@ fun ConversationScreen(
                                         scorePoints = 0
                                         lastFeedback = null
                                         wrongTextsInCurrentNode = emptySet()
-                                        shuffleSeed++ // מערבב מחדש הכל כדי שלא יזכרו מיקומים
+                                        shuffleSeed++
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = TealDark),
                                     modifier = Modifier.fillMaxWidth()
@@ -446,7 +456,6 @@ fun ConversationScreen(
                                 .fillMaxWidth()
                                 .offset { IntOffset(shakeOffsetX.value.roundToInt(), 0) }
                         ) {
-                            // משוב מפורט
                             AnimatedVisibility(
                                 visible = lastFeedback != null,
                                 enter = expandVertically() + fadeIn(),
@@ -589,7 +598,7 @@ fun ConversationScreen(
                                                     livesRemaining = 3
                                                     scorePoints = 0
                                                     lastFeedback = null
-                                                    shuffleSeed++ // ערבוב חדש
+                                                    shuffleSeed++
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = TealDark)
                                             ) {
@@ -646,7 +655,7 @@ fun ConversationScreen(
                                         },
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                         modifier = Modifier.height(32.dp),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, PurpleNeon)
+                                        border = BorderStroke(1.dp, PurpleNeon)
                                     ) {
                                         if (isGeneratingMoreOptions) {
                                             CircularProgressIndicator(
@@ -667,7 +676,7 @@ fun ConversationScreen(
                                     }
                                 }
 
-                                shuffledOptions.forEach { option ->
+                                for (option in shuffledOptions) {
                                     val isAlreadyMarkedWrong = wrongTextsInCurrentNode.contains(option.textEn)
 
                                     Card(
@@ -689,10 +698,9 @@ fun ConversationScreen(
                                                     stepNumber++
                                                     currentNodeId = option.nextNodeId
                                                 } else {
-                                                    // טעות! מסמן את הטקסט השגוי, מוריד לב, ומערבב מיד את כל הכרטיסים מחדש!
                                                     wrongTextsInCurrentNode = wrongTextsInCurrentNode + option.textEn
                                                     livesRemaining--
-                                                    shuffleSeed++ // ערבוב מיידי כדי שלא ינחשו לפי מיקום קודם
+                                                    shuffleSeed++ // ערבוב מיידי של כל הכרטיסים אחרי טעות!
                                                     triggerErrorShake()
                                                 }
                                             },
@@ -746,7 +754,7 @@ fun ConversationScreen(
 
         // --- דיאלוג יצירת שיחה חדשה באמצעות מודל AI מקוון ---
         if (showAiGeneratorDialog) {
-            val quickTopics = listOf(
+            val quickTopics: List<String> = listOf(
                 "בדיקה ביטחונית ותשאול מעמיק בשדה תעופה",
                 "ראיון עבודה לחברת סייבר והייטק",
                 "הזמנת אוכל במסעדת שף והחזרת מנה",
@@ -754,6 +762,7 @@ fun ConversationScreen(
                 "פנייה לרופא שיניים בחירום בחו״ל",
                 "פתיחת חשבון בנק והנפקת כרטיס אשראי"
             )
+            val difficultyOptions: List<String> = listOf("בינוני", "בינוני-מתקדם", "מתקדם מאוד")
 
             AlertDialog(
                 onDismissRequest = { if (!isGeneratingScenario) showAiGeneratorDialog = false },
@@ -777,7 +786,7 @@ fun ConversationScreen(
 
                         OutlinedTextField(
                             value = aiTopicInput,
-                            onValueChange = { aiTopicInput = it },
+                            onValueChange = { newValue: String -> aiTopicInput = newValue },
                             placeholder = { Text("למשל: החלפת מוצר פגום בחנות בארה״ב...", color = Color.Gray) },
                             singleLine = false,
                             maxLines = 2,
@@ -794,8 +803,14 @@ fun ConversationScreen(
                         Text("או לחץ על נושא מהיר:", color = StarGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            items(quickTopics) { topic ->
+                        // גלילה אופקית עם Row תקני (ללא LazyRow בתוך AlertDialog)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                        ) {
+                            for (topic in quickTopics) {
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(10.dp))
@@ -804,14 +819,17 @@ fun ConversationScreen(
                                         .clickable { aiTopicInput = topic }
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
-                                    Text(topic, color = Color.White, fontSize = 11.sp)
+                                    Text(text = topic, color = Color.White, fontSize = 11.sp)
                                 }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("בינוני", "בינוני-מתקדם", "מתקדם מאוד").forEach { diff ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            for (diff in difficultyOptions) {
                                 val selected = aiDifficultySelected == diff
                                 Box(
                                     modifier = Modifier
@@ -823,7 +841,11 @@ fun ConversationScreen(
                                         .padding(vertical = 6.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(diff, color = if (selected) PurpleNeon else Color.LightGray, fontSize = 11.sp)
+                                    Text(
+                                        text = diff,
+                                        color = if (selected) PurpleNeon else Color.LightGray,
+                                        fontSize = 11.sp
+                                    )
                                 }
                             }
                         }
@@ -861,7 +883,6 @@ fun ConversationScreen(
                                     allScenarios = listOf(newScenario) + allScenarios
                                     showAiGeneratorDialog = false
                                     aiTopicInput = ""
-                                    // פותח מיד את השיחה החדשה שה-AI יצר!
                                     activeScenario = newScenario
                                     currentNodeId = "start"
                                     stepNumber = 1
@@ -909,7 +930,7 @@ fun ConversationScreen(
                         Spacer(modifier = Modifier.height(10.dp))
                         OutlinedTextField(
                             value = apiKeyInput,
-                            onValueChange = { apiKeyInput = it },
+                            onValueChange = { newValue: String -> apiKeyInput = newValue },
                             placeholder = { Text("השאר ריק לשימוש במנוע החינמי המובנה", color = Color.Gray) },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
