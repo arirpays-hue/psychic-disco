@@ -1,5 +1,8 @@
 package com.example.englishtutor
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,11 +43,9 @@ fun SettingsScreen(
     var speechPitchSlider by remember { mutableFloatStateOf(speechManager.speechPitch) }
     var hapticsEnabled by remember { mutableStateOf(haptic.isHapticsEnabled) }
 
-    // יצירת חפיסת AI מותאמת
     var customAiTopicInput by remember { mutableStateOf("") }
     var isGeneratingDeck by remember { mutableStateOf(false) }
 
-    // ייבוא מילים
     var csvImportInput by remember { mutableStateOf("") }
     var showImportDialog by remember { mutableStateOf(false) }
 
@@ -61,15 +62,22 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(modifier = Modifier.clickable { 
-                    haptic.click()
-                    onOpenDrawer() 
-                }) {
+                Box(
+                    modifier = Modifier.clickable {
+                        haptic.click()
+                        onOpenDrawer()
+                    }
+                ) {
                     CanvaIconBadge(accentColor = TealNeon, badgeSize = 44.dp) {
                         CanvaMenuIcon(tint = TealNeon)
                     }
                 }
-                Text("הגדרות והתאמה אישית", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "הגדרות והתאמה אישית",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 CanvaIconBadge(accentColor = StarGold, badgeSize = 44.dp) {
                     CanvaSettingsIcon(tint = StarGold, modifier = Modifier.size(22.dp))
                 }
@@ -77,15 +85,24 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // --- 1. מחולל חפיסות מילים ב-AI ---
-            Text("מחולל כרטיסיות מותאם אישית (AI Deck)", color = TealNeon, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            // 1. מחולל חפיסות מילים ב-AI
+            Text(
+                text = "מחולל כרטיסיות מותאם אישית (AI Deck)",
+                color = TealNeon,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = customAiTopicInput,
                 onValueChange = { customAiTopicInput = it },
                 placeholder = { Text("הקלד נושא: למשל 'פיתוח אנדרואיד', 'קולינריה איטלקית'...") },
                 modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = TealNeon
+                )
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(
@@ -98,12 +115,20 @@ fun SettingsScreen(
                         isGeneratingDeck = false
                         if (newDeck.isNotEmpty()) {
                             haptic.success()
-                            Toast.makeText(context, "נוצרו ${newDeck.size} כרטיסיות חדשות בהצלחה!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                "נוצרו ${newDeck.size} כרטיסיות חדשות בהצלחה!",
+                                Toast.LENGTH_SHORT
+                            ).show()
                             onDeckGenerated(newDeck)
                             customAiTopicInput = ""
                         } else {
                             haptic.error()
-                            Toast.makeText(context, "שגיאה ביצירת החפיסה. נסה שוב.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                "שגיאה ביצירת החפיסה. נסה שוב.",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     }
                 },
@@ -119,8 +144,13 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- 2. בקרת שמע ורטט (Haptics & TTS) ---
-            Text("הגדרות שמע ורטט (Audio & Haptics)", color = StarGold, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            // 2. בקרת שמע ורטט (Haptics & TTS)
+            Text(
+                text = "הגדרות שמע ורטט (Audio & Haptics)",
+                color = StarGold,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
             Spacer(modifier = Modifier.height(10.dp))
 
             Row(
@@ -140,7 +170,11 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(10.dp))
-            Text("מהירות דיבור: ${String.format("%.2f", speechRateSlider)}x", color = Color.LightGray, fontSize = 13.sp)
+            Text(
+                text = "מהירות דיבור: ${(speechRateSlider * 100).toInt()}%",
+                color = Color.LightGray,
+                fontSize = 13.sp
+            )
             Slider(
                 value = speechRateSlider,
                 onValueChange = {
@@ -150,7 +184,11 @@ fun SettingsScreen(
                 valueRange = 0.6f..1.4f
             )
 
-            Text("גובה צליל (Pitch): ${String.format("%.2f", speechPitchSlider)}", color = Color.LightGray, fontSize = 13.sp)
+            Text(
+                text = "גובה צליל (Pitch): ${(speechPitchSlider * 100).toInt()}%",
+                color = Color.LightGray,
+                fontSize = 13.sp
+            )
             Slider(
                 value = speechPitchSlider,
                 onValueChange = {
@@ -162,8 +200,13 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- 3. גיבוי, ייצוא וייבוא נתונים ---
-            Text("ניהול נתונים וגיבוי מקומי (Backup & Restore)", color = PurpleNeon, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            // 3. גיבוי, ייצוא וייבוא נתונים
+            Text(
+                text = "ניהול נתונים וגיבוי מקומי (Backup & Restore)",
+                color = PurpleNeon,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
             Spacer(modifier = Modifier.height(10.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -171,9 +214,9 @@ fun SettingsScreen(
                     onClick = {
                         haptic.click()
                         val jsonBackup = wordRepo.exportProgressToJson(wordRepo.loadWords())
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val clip = android.content.ClipData.newPlainText("EnglishTutorBackup", jsonBackup)
-                        clipboard.setPrimaryClip(clip)
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        val clip = ClipData.newPlainText("EnglishTutorBackup", jsonBackup)
+                        clipboard?.setPrimaryClip(clip)
                         haptic.success()
                         Toast.makeText(context, "קובץ הגיבוי הועתק ללוח!", Toast.LENGTH_SHORT).show()
                     },
@@ -184,9 +227,9 @@ fun SettingsScreen(
                 }
 
                 Button(
-                    onClick = { 
+                    onClick = {
                         haptic.click()
-                        showImportDialog = true 
+                        showImportDialog = true
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = CardDark)
@@ -197,8 +240,13 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- 4. הגדרת מפתח API חיצוני ---
-            Text("מפתח API פרטי (Gemini / OpenRouter)", color = Color.LightGray, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            // 4. הגדרת מפתח API חיצוני
+            Text(
+                text = "מפתח API פרטי (Gemini / OpenRouter)",
+                color = Color.LightGray,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = apiKeyInput,
@@ -206,7 +254,11 @@ fun SettingsScreen(
                 placeholder = { Text("השאר ריק לשימוש במנוע החינמי המובנה") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = StarGold
+                )
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(
@@ -230,29 +282,45 @@ fun SettingsScreen(
                 title = { Text("ייבוא מילים מקובץ CSV", color = TealNeon, fontWeight = FontWeight.Bold) },
                 text = {
                     Column {
-                        Text("הדבק שורות בפורמט: מילה באנגלית, תרגום בעברית", color = Color.LightGray, fontSize = 12.sp)
+                        Text(
+                            text = "הדבק שורות בפורמט: מילה באנגלית, תרגום בעברית",
+                            color = Color.LightGray,
+                            fontSize = 12.sp
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
                             value = csvImportInput,
                             onValueChange = { csvImportInput = it },
                             placeholder = { Text("run, לרוץ\njump, לקפוץ") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            ),
                             modifier = Modifier.fillMaxWidth().height(140.dp)
                         )
                     }
                 },
                 confirmButton = {
-                    Button(onClick = {
-                        val importedCount = wordRepo.importWordsFromCsv(csvImportInput)
-                        showImportDialog = false
-                        haptic.success()
-                        Toast.makeText(context, "יובאו $importedCount מילים בהצלחה!", Toast.LENGTH_SHORT).show()
-                        onDeckGenerated(wordRepo.loadWords())
-                    }) {
+                    Button(
+                        onClick = {
+                            val importedCount = wordRepo.importWordsFromCsv(csvImportInput)
+                            showImportDialog = false
+                            haptic.success()
+                            Toast.makeText(
+                                context,
+                                "יובאו $importedCount מילים בהצלחה!",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            onDeckGenerated(wordRepo.loadWords())
+                        }
+                    ) {
                         Text("ייבא")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showImportDialog = false }) { Text("ביטול", color = Color.Gray) }
+                    TextButton(onClick = { showImportDialog = false }) {
+                        Text("ביטול", color = Color.Gray)
+                    }
                 }
             )
         }
