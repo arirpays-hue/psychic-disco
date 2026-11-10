@@ -26,7 +26,7 @@ import kotlinx.coroutines.withContext
 enum class AppMode(val titleHe: String) {
     FLASHCARDS("כרטיסיות חכמות"),
     CONVERSATIONS("סימולציות שיחה (Roleplay)"),
-    FREE_CHAT("צ'אט חופשי מול AI"),
+    FREE_CHAT("צ'אט חופשי + מבחני AI"),
     SPELLING("מבחן איות והקלדה"),
     SPEED_ATTACK("אתגר 60 שניות")
 }
@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         speechManager = SpeechManager(applicationContext).apply {
-            initTts {}
+            initTts()
         }
 
         val wordRepository = WordRepository(applicationContext)
@@ -108,7 +108,6 @@ class MainActivity : ComponentActivity() {
 
                                 Spacer(modifier = Modifier.height(24.dp))
 
-                                // פריטי התפריט בסגנון התמונה (עם תגי סמלים וקטוריים מותאמים ללא אימוג'ים)
                                 AppMode.entries.forEach { mode ->
                                     val isSelected = currentMode == mode
                                     Row(
@@ -124,6 +123,7 @@ class MainActivity : ComponentActivity() {
                                             )
                                             .clickable {
                                                 speechManager.stop()
+                                                speechManager.stopListening()
                                                 currentMode = mode
                                                 scope.launch { drawerState.close() }
                                             }
@@ -171,10 +171,10 @@ class MainActivity : ComponentActivity() {
                                 AppMode.FLASHCARDS -> FlashcardScreen(
                                     words = loaded,
                                     repository = wordRepository,
-                                    isSpeaking = false,
-                                    autoSpeak = true,
-                                    onToggleAutoSpeak = {},
-                                    onSpeakWord = { speechManager.speak(it ?: "") },
+                                    isSpeaking = speechManager.isCurrentlySpeaking,
+                                    autoSpeak = !speechManager.isVoiceMuted,
+                                    onToggleAutoSpeak = { speechManager.toggleMute() },
+                                    onSpeakWord = { speechManager.speak(it ?: "", forceEvenIfMuted = true) },
                                     onStopSpeaking = { speechManager.stop() },
                                     onOpenDrawer = { scope.launch { drawerState.open() } }
                                 )
