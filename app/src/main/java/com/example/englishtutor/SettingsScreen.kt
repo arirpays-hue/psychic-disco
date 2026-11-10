@@ -34,8 +34,8 @@ fun SettingsScreen(
     speechManager: SpeechManager,
     haptic: HapticManager,
     onOpenDrawer: () -> Unit,
-    onBackToMain: () -> Unit,
-    onDeckGenerated: (List<WordCard>) -> Unit
+    onDeckGenerated: (List<WordCard>) -> Unit,
+    onBackToMain: () -> Unit = onOpenDrawer
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -77,7 +77,7 @@ fun SettingsScreen(
                 Box(
                     modifier = Modifier.clickable {
                         haptic.click()
-                        onOpenDrawer()
+                        onBackToMain()
                     }
                 ) {
                     CanvaIconBadge(accentColor = TealNeon, badgeSize = 44.dp) {
@@ -86,32 +86,24 @@ fun SettingsScreen(
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "הגדרות והתאמה אישית",
+                        text = "הגדרות ומחולל מילים AI",
                         color = Color.White,
                         fontSize = 19.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                     Text(
-                        text = "קול, רטט, גיבוי והוספת כרטיסיות ב-AI",
+                        text = "התאמת קול, רטט, גיבוי והוספת כרטיסיות",
                         color = StarGold,
                         fontSize = 11.sp
                     )
                 }
-                Box(
-                    modifier = Modifier.clickable {
-                        haptic.click()
-                        onBackToMain()
-                    }
-                ) {
-                    CanvaIconBadge(accentColor = PurpleNeon, badgeSize = 44.dp) {
-                        CanvaBackArrowIcon(tint = PurpleNeon, modifier = Modifier.size(22.dp))
-                    }
+                CanvaIconBadge(accentColor = StarGold, badgeSize = 44.dp) {
+                    CanvaSettingsIcon(tint = StarGold, modifier = Modifier.size(22.dp))
                 }
             }
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // כרטיס 1: הוספת מילים חדשות באמצעות AI
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -133,7 +125,7 @@ fun SettingsScreen(
                                 fontSize = 16.sp
                             )
                             Text(
-                                text = "הקלד נושא ליצירת חבילת כרטיסיות מותאמת אישית",
+                                text = "הקלד נושא או בחר מהרשימה ליצירת כרטיסיות חדשות",
                                 color = Color.LightGray,
                                 fontSize = 12.sp
                             )
@@ -195,7 +187,7 @@ fun SettingsScreen(
                                 isGeneratingDeck = false
                                 if (newDeck.isNotEmpty()) {
                                     haptic.success()
-                                    aiDeckStatusBanner = "נוספו ${newDeck.size} מילים חדשות למאגר! (${newDeck.take(3).joinToString { it.english }}...)"
+                                    aiDeckStatusBanner = "נוספו ${newDeck.size} מילים חדשות למאגר!"
                                     onDeckGenerated(newDeck)
                                     customAiTopicInput = ""
                                 } else {
@@ -239,7 +231,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // כרטיס 2: בקרת שמע, קול ורטט
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -325,7 +316,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // כרטיס 3: גיבוי, ייצוא וייבוא נתונים
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -389,7 +379,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // כרטיס 4: מפתח API אישי
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -423,7 +412,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = apiKeyInput,
                         onValueChange = { apiKeyInput = it },
-                        placeholder = { Text("השאר ריק לשימוש במנוע ה-AI החינמי המובנה", color = Color.Gray) },
+                        placeholder = { Text("השאר ריק לשימוש במנוע החינמי המובנה", color = Color.Gray) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
