@@ -1,5 +1,6 @@
 package com.example.englishtutor
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -16,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.util.Locale
 import kotlin.math.max
+import kotlin.random.Random
 
 enum class VoiceAccent(val label: String, val locale: Locale) {
     US("אמריקאי (US)", Locale.US),
@@ -27,11 +29,11 @@ class SpeechManager(private val context: Context) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tts: TextToSpeech? = null
     private var activeRecognizer: SpeechRecognizer? = null
+    private var lastPartialSpoken: String = ""
 
     var isTtsReady by mutableStateOf(false)
         private set
 
-    // מצב השתקה דו-מצבי שמשתקף מיד בכפתור הרמקול
     var isVoiceMuted by mutableStateOf(false)
         private set
 
@@ -41,9 +43,21 @@ class SpeechManager(private val context: Context) {
     var isListeningMic by mutableStateOf(false)
         private set
 
-    // עוצמת הקול החיה מהמיקרופון (0.0 עד 1.0) עבור אנימציית הגלים בקנבה
     var liveVoiceLevel by mutableFloatStateOf(0.2f)
         private set
+
+    private val wavePulseRunnable = object : Runnable {
+        override fun run() {
+            if (isListeningMic) {
+                // שומר על תנועת גלי קול חיה וחלקה באנימציית הקנבה גם בין הברות
+                val jitter = Random.nextFloat() * 0.25f + 0.2f
+                if (liveVoiceLevel < 0.35f) {
+                    liveVoiceLevel = jitter
+                }
+                mainHandler.postDelayed(this, 110L)
+            }
+        }
+    }
 
     var currentAccent: VoiceAccent = VoiceAccent.US
         set(value) {
@@ -97,18 +111,12 @@ class SpeechManager(private val context: Context) {
         }
     }
 
-    // החלפת מצב השתקה / הפעלת קול בלחיצה
     fun toggleMute(): Boolean {
         isVoiceMuted = !isVoiceMuted
         if (isVoiceMuted) {
             stop()
         }
         return isVoiceMuted
-    }
-
-    fun setMuted(muted: Boolean) {
-        isVoiceMuted = muted
-        if (muted) stop()
     }
 
     fun speak(text: String, forceEvenIfMuted: Boolean = false) {
@@ -142,6 +150,7 @@ class SpeechManager(private val context: Context) {
         mainHandler.post {
             isListeningMic = false
             liveVoiceLevel = 0.15f
+            mainHandler.removeCallbacks(wavePulseRunnable)
             runCatching {
                 activeRecognizer?.stopListening()
                 activeRecognizer?.cancel()
@@ -151,37 +160,51 @@ class SpeechManager(private val context: Context) {
         }
     }
 
-    fun buildSpeechRecognizerIntent(): Intent {
+    // מאתר את שירות הזיהוי הפנימי במכשיר כדי להריץ הקלטה שקטה ללא שום חלון קופץ של גוגל
+    private fun createInAppSpeechRecognizer(activityContext: Context): SpeechRecognizer {
+        val pm = activityContext.packageManager
+        val serviceIntent = Intent( "android.speech.RecognitionService")
+        val services = runCatching { pm.queryIntentServices(serviceIntent, 0) }.getOrNull()
+        val firstService = services?.firstOrNull()?.serviceInfo
+
+        return if (firstService != null) {
+            val component = ComponentName(firstService.packageName, firstService.name)
+            SpeechRecognizer.createSpeechRecognizer(activityContext, component)
+        } else {
+            SpeechRecognizer.createSpeechRecognizer(activityContext)
+        }
+    }
+
+    private fun buildSilentRecognizerIntent(): Intent {
+        // ללא EXTRA_PROMPT כדי שמערכת האנדרואיד לעולם לא תקפיץ חלונית לבנה חיצונית!
         return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, currentAccent.locale.toLanguageTag())
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak in English...")
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            putExtra("android.speech.extra.DICTATION_MODE", true)
         }
     }
 
-    fun startListening(
+    fun startListeningInApp(
+        activityContext: Context,
         onPartialResult: (String) -> Unit = {},
         onResult: (spokenText: String) -> Unit,
-        onFallbackIntentNeeded: (Intent) -> Unit,
         onError: (String) -> Unit
     ) {
         mainHandler.post {
-            stop() // עוצר הקראה קולית של ה-TTS כדי שלא תקליט את עצמה
+            stop()
             stopListening()
-
-            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-                onFallbackIntentNeeded(buildSpeechRecognizerIntent())
-                return@post
-            }
+            lastPartialSpoken = ""
 
             runCatching {
-                val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                val recognizer = createInAppSpeechRecognizer(activityContext)
                 activeRecognizer = recognizer
                 isListeningMic = true
-                liveVoiceLevel = 0.25f
+                liveVoiceLevel = 0.35f
+                mainHandler.post(wavePulseRunnable)
 
                 recognizer.setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
@@ -190,19 +213,18 @@ class SpeechManager(private val context: Context) {
 
                     override fun onBeginningOfSpeech() {
                         isListeningMic = true
-                        liveVoiceLevel = 0.5f
+                        liveVoiceLevel = 0.65f
                     }
 
                     override fun onRmsChanged(rmsdB: Float) {
-                        // ממיר דציבלים לסקאלה של 0.15 עד 1.0 עבור אנימציית הקנבה
-                        val normalized = ((rmsdB + 2f) / 12f).coerceIn(0.15f, 1.0f)
+                        val normalized = ((rmsdB + 2f) / 11f).coerceIn(0.22f, 1.0f)
                         liveVoiceLevel = normalized
                     }
 
                     override fun onBufferReceived(buffer: ByteArray?) {}
 
                     override fun onEndOfSpeech() {
-                        liveVoiceLevel = 0.2f
+                        liveVoiceLevel = 0.25f
                     }
 
                     override fun onPartialResults(partialResults: Bundle?) {
@@ -211,6 +233,7 @@ class SpeechManager(private val context: Context) {
                             ?.firstOrNull()
                             ?.trim()
                         if (!partial.isNullOrEmpty()) {
+                            lastPartialSpoken = partial
                             onPartialResult(partial)
                         }
                     }
@@ -218,11 +241,14 @@ class SpeechManager(private val context: Context) {
                     override fun onResults(results: Bundle?) {
                         isListeningMic = false
                         liveVoiceLevel = 0.15f
+                        mainHandler.removeCallbacks(wavePulseRunnable)
+
                         val spoken = results
                             ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                             ?.firstOrNull()
                             ?.trim()
                             .orEmpty()
+                            .ifEmpty { lastPartialSpoken }
 
                         runCatching { recognizer.destroy() }
                         activeRecognizer = null
@@ -230,40 +256,42 @@ class SpeechManager(private val context: Context) {
                         if (spoken.isNotEmpty()) {
                             onResult(spoken)
                         } else {
-                            onError("לא זוהו מילים. נסה לדבר קרוב יותר למיקרופון.")
+                            onError("לא נקלטו מילים באנגלית. נסה לדבר שוב.")
                         }
                     }
 
                     override fun onError(error: Int) {
                         isListeningMic = false
                         liveVoiceLevel = 0.15f
+                        mainHandler.removeCallbacks(wavePulseRunnable)
                         runCatching { recognizer.destroy() }
                         activeRecognizer = null
 
-                        // אם שירות הרקע של גוגל חסום במכשיר, פותח אוטומטית את חלונית ההקלטה של המערכת
-                        if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ||
-                            error == SpeechRecognizer.ERROR_CLIENT ||
-                            error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY
-                        ) {
-                            onFallbackIntentNeeded(buildSpeechRecognizerIntent())
-                        } else {
-                            val msg = when (error) {
-                                SpeechRecognizer.ERROR_NO_MATCH -> "לא זוהה דיבור באנגלית. נסה שוב."
-                                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "לא נשמע קול במיקרופון."
-                                SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "בעיית רשת בזיהוי הקולי."
-                                else -> "הקלטה הסתיימה ללא זיהוי (קוד $error)."
-                            }
-                            onError(msg)
+                        // אם כבר נקלט טקסט חלקי בזמן הדיבור, נשתמש בו במקום לזרוק שגיאה!
+                        if (lastPartialSpoken.isNotBlank()) {
+                            val captured = lastPartialSpoken
+                            lastPartialSpoken = ""
+                            onResult(captured)
+                            return
                         }
+
+                        val msg = when (error) {
+                            SpeechRecognizer.ERROR_NO_MATCH -> "לא זוהה דיבור באנגלית. לחץ שוב על המיקרופון ודבר."
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "לא נשמע קול במיקרופון."
+                            SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "בעיית חיבור ברשת לזיהוי קולי."
+                            else -> "זיהוי הקול הופסק. לחץ על המיקרופון לניסיון נוסף."
+                        }
+                        onError(msg)
                     }
 
                     override fun onEvent(eventType: Int, params: Bundle?) {}
                 })
 
-                recognizer.startListening(buildSpeechRecognizerIntent())
+                recognizer.startListening(buildSilentRecognizerIntent())
             }.onFailure {
                 isListeningMic = false
-                onFallbackIntentNeeded(buildSpeechRecognizerIntent())
+                mainHandler.removeCallbacks(wavePulseRunnable)
+                onError("לא ניתן להפעיל זיהוי קולי פנימי במכשיר זה.")
             }
         }
     }
