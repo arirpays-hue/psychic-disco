@@ -1,6 +1,5 @@
 package com.example.englishtutor
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,8 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,16 +16,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// -------------------------------------------------------------
-// 1. שיחה חופשית לחלוטין מול AI (Free Flow Chat)
-// -------------------------------------------------------------
 data class ChatMessage(val text: String, val isUser: Boolean, val grammarCorrection: String? = null)
 
 @Composable
@@ -72,12 +65,16 @@ fun FreeFlowChatScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onOpenDrawer) {
-                    Icon(Icons.Default.Menu, contentDescription = null, tint = TealNeon)
+                Box(modifier = Modifier.clickable { onOpenDrawer() }) {
+                    CanvaIconBadge(accentColor = TealNeon, badgeSize = 42.dp) {
+                        CanvaMenuIcon(tint = TealNeon)
+                    }
                 }
                 Text("צ'אט דיבור חופשי מול AI", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                IconButton(onClick = { speechManager.stop() }) {
-                    Icon(Icons.Default.VolumeOff, contentDescription = null, tint = StarGold)
+                Box(modifier = Modifier.clickable { speechManager.stop() }) {
+                    CanvaIconBadge(accentColor = StarGold, badgeSize = 42.dp) {
+                        SpeakerVectorIcon(tint = StarGold, isMuted = true, modifier = Modifier.size(20.dp))
+                    }
                 }
             }
 
@@ -101,7 +98,11 @@ fun FreeFlowChatScreen(
                         }
                         if (msg.grammarCorrection != null) {
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("💡 תיקון: ${msg.grammarCorrection}", color = StarGold, fontSize = 12.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CanvaSparkleIcon(tint = StarGold, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("תיקון דקדוק: ${msg.grammarCorrection}", color = StarGold, fontSize = 12.sp)
+                            }
                         }
                     }
                 }
@@ -111,8 +112,8 @@ fun FreeFlowChatScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = {
+                Box(
+                    modifier = Modifier.clickable {
                         if (!isRecording) {
                             isRecording = true
                             speechManager.startListening(
@@ -123,10 +124,19 @@ fun FreeFlowChatScreen(
                                 onError = { isRecording = false }
                             )
                         }
-                    },
-                    modifier = Modifier.background(if (isRecording) ErrorCrimson else TealDark, CircleShape)
+                    }
                 ) {
-                    Icon(Icons.Default.Mic, contentDescription = null, tint = Color.White)
+                    CanvaIconBadge(
+                        accentColor = if (isRecording) ErrorCrimson else TealNeon,
+                        badgeSize = 48.dp,
+                        cornerRadius = 24.dp
+                    ) {
+                        CanvaMicIcon(
+                            tint = if (isRecording) ErrorCrimson else TealNeon,
+                            isRecording = isRecording,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -134,7 +144,7 @@ fun FreeFlowChatScreen(
                 OutlinedTextField(
                     value = inputText,
                     onValueChange = { inputText = it },
-                    placeholder = { Text("הקלד באנגלית...", color = Color.Gray) },
+                    placeholder = { Text("הקלד או הקלט באנגלית...", color = Color.Gray) },
                     modifier = Modifier.weight(1f),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -144,20 +154,16 @@ fun FreeFlowChatScreen(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                IconButton(
-                    onClick = { sendMessage(inputText) },
-                    modifier = Modifier.background(TealNeon, CircleShape)
-                ) {
-                    Icon(Icons.Default.Send, contentDescription = null, tint = DarkBg)
+                Box(modifier = Modifier.clickable { sendMessage(inputText) }) {
+                    CanvaIconBadge(accentColor = TealNeon, badgeSize = 48.dp, cornerRadius = 24.dp) {
+                        CanvaSendIcon(tint = TealNeon, modifier = Modifier.size(20.dp))
+                    }
                 }
             }
         }
     }
 }
 
-// -------------------------------------------------------------
-// 2. מבחן הקלדה / כתיבה (Spelling Practice)
-// -------------------------------------------------------------
 @Composable
 fun SpellingPracticeScreen(
     words: List<WordCard>,
@@ -185,13 +191,17 @@ fun SpellingPracticeScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, null, tint = TealNeon) }
+                Box(modifier = Modifier.clickable { onOpenDrawer() }) {
+                    CanvaIconBadge(accentColor = TealNeon, badgeSize = 42.dp) {
+                        CanvaMenuIcon(tint = TealNeon)
+                    }
+                }
                 Text("מבחן איות והקלדה", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 Text("ניקוד: $score", color = StarGold, fontWeight = FontWeight.Bold)
             }
 
             Card(
-                modifier = Modifier.fillMaxWidth().height(260.dp),
+                modifier = Modifier.fillMaxWidth().height(260.dp).border(2.dp, TealNeon, RoundedCornerShape(24.dp)),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = CardDark)
             ) {
@@ -200,11 +210,10 @@ fun SpellingPracticeScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    IconButton(
-                        onClick = { speechManager.speak(currentWord.english) },
-                        modifier = Modifier.size(56.dp).background(TealDark, CircleShape)
-                    ) {
-                        Icon(Icons.Default.VolumeUp, null, tint = TealNeon, modifier = Modifier.size(32.dp))
+                    Box(modifier = Modifier.clickable { speechManager.speak(currentWord.english) }) {
+                        CanvaIconBadge(accentColor = TealNeon, badgeSize = 60.dp, cornerRadius = 30.dp) {
+                            SpeakerVectorIcon(tint = TealNeon, isMuted = false, modifier = Modifier.size(28.dp))
+                        }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(currentWord.hebrew, fontSize = 28.sp, color = Color.White, fontWeight = FontWeight.Bold)
@@ -250,12 +259,20 @@ fun SpellingPracticeScreen(
 
                 if (resultStatus != null) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        if (resultStatus == true) "✓ איות מושלם!" else "✗ שגוי! המילה הנכונה: ${currentWord.english}",
-                        color = if (resultStatus == true) CheckNeon else ErrorCrimson,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (resultStatus == true) {
+                            CanvaCheckIcon(tint = CheckNeon, modifier = Modifier.size(20.dp))
+                        } else {
+                            CanvaCloseIcon(tint = ErrorCrimson, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (resultStatus == true) "איות מושלם!" else "שגוי! המילה הנכונה: ${currentWord.english}",
+                            color = if (resultStatus == true) CheckNeon else ErrorCrimson,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = {
                         typedInput = ""
@@ -270,9 +287,6 @@ fun SpellingPracticeScreen(
     }
 }
 
-// -------------------------------------------------------------
-// 3. אתגר 60 שניות מהיר (Speed Challenge / Time Attack)
-// -------------------------------------------------------------
 @Composable
 fun SpeedChallengeScreen(
     words: List<WordCard>,
@@ -287,7 +301,6 @@ fun SpeedChallengeScreen(
 
     val currentWord = words.getOrNull(currentIdx) ?: WordCard("Run", "לרוץ")
 
-    // אפשרויות בחירה אמריקאיות (מתוכן 1 נכונה ו-3 מסיחות)
     val options = remember(currentIdx) {
         val wrong = words.filter { it.hebrew != currentWord.hebrew }.shuffled().take(3).map { it.hebrew }
         (wrong + currentWord.hebrew).shuffled()
@@ -316,9 +329,17 @@ fun SpeedChallengeScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, null, tint = TealNeon) }
-                Text("אתגר 60 שניות ⚡", color = StarGold, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                Text("שיא: $highScore", color = Color.White)
+                Box(modifier = Modifier.clickable { onOpenDrawer() }) {
+                    CanvaIconBadge(accentColor = TealNeon, badgeSize = 42.dp) {
+                        CanvaMenuIcon(tint = TealNeon)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CanvaBoltIcon(tint = StarGold, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("אתגר 60 שניות", color = StarGold, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                }
+                Text("שיא: $highScore", color = Color.White, fontWeight = FontWeight.Bold)
             }
 
             if (!isRunning && timeLeft == 60) {
@@ -335,7 +356,9 @@ fun SpeedChallengeScreen(
                 }
             } else if (!isRunning && timeLeft == 0) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("הזמן נגמר! 🏁", color = StarGold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    TrophyVectorIcon(tint = StarGold, modifier = Modifier.size(64.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("הזמן נגמר!", color = StarGold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     Text("הניקוד שלך: $score", color = Color.White, fontSize = 20.sp)
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = {
@@ -347,10 +370,19 @@ fun SpeedChallengeScreen(
                     }
                 }
             } else {
-                Text("⏱️ זמן נותר: $timeLeft שניות", color = if (timeLeft < 10) ErrorCrimson else TealNeon, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CanvaTimerIcon(tint = if (timeLeft < 10) ErrorCrimson else TealNeon)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "זמן נותר: $timeLeft שניות",
+                        color = if (timeLeft < 10) ErrorCrimson else TealNeon,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
                 Card(
-                    modifier = Modifier.fillMaxWidth().height(160.dp),
+                    modifier = Modifier.fillMaxWidth().height(160.dp).border(2.dp, TealNeon, RoundedCornerShape(20.dp)),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = CardDark)
                 ) {
