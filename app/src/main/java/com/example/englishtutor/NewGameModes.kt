@@ -1,5 +1,11 @@
 package com.example.englishtutor
 
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -13,15 +19,17 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -37,18 +46,28 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-data class ChatMessage(val text: String, val isUser: Boolean, val grammarCorrection: String? = null)
+data class ChatMessage(
+    val id: Long = System.nanoTime(),
+    val text: String,
+    val isUser: Boolean,
+    val grammarCorrection: String? = null,
+    val interactiveQuiz: InteractiveChatQuiz? = null,
+    val translatedHe: String? = null
+)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FreeFlowChatScreen(
     conversationRepo: ConversationRepository,
     speechManager: SpeechManager,
     onOpenDrawer: () -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
@@ -56,17 +75,25 @@ fun FreeFlowChatScreen(
         mutableStateOf(
             listOf(
                 ChatMessage(
-                    "Hello! I am your AI conversational partner. What would you like to talk about today?",
-                    false
+                    text = "Hello! I am your AI conversational partner. You can speak with the microphone, long-press any message to translate it, or ask me for a live Multiple-Choice Quiz!",
+                    isUser = false
                 )
             )
         )
     }
     var inputText by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
-    var isRecording by remember { mutableStateOf(false) }
+    var voiceStatusBanner by remember { mutableStateOf<String?>(null) }
 
-    // גלילה אוטומטית לתחתית הצ'אט בכל הודעה חדשה או כשמופיעה בועת המחשבה של ה-AI
+    // מזהה ההודעה שנלחצה בלחיצה ארוכה כדי להציג עבורה את כפתור התרגום של קנבה
+    var longPressedMsgId by remember { mutableStateOf<Long?>(null) }
+    var translatingMsgId by remember { mutableStateOf<Long?>(null) }
+
+    val isMuted = speechManager.isVoiceMuted
+    val isSpeakingNow = speechManager.isCurrentlySpeaking
+    val isListeningMic = speechManager.isListeningMic
+    val liveVoiceLevel = speechManager.liveVoiceLevel
+
     LaunchedEffect(messages.size, isSending) {
         val totalItems = messages.size + (if (isSending) 1 else 0)
         if (totalItems > 0) {
@@ -77,16 +104,94 @@ fun FreeFlowChatScreen(
     fun sendMessage(userText: String) {
         val cleanText = userText.trim()
         if (cleanText.isBlank() || isSending) return
-        val userMsg = ChatMessage(cleanText, true)
+        val userMsg = ChatMessage(text = cleanText, isUser = true)
         messages = messages + userMsg
         inputText = ""
         isSending = true
+        voiceStatusBanner = null
 
         scope.launch {
             val response = conversationRepo.generateFreeChatReply(cleanText, messages)
             isSending = false
-            messages = messages + ChatMessage(response.replyEn, false, response.correctionHe)
-            speechManager.speak(response.replyEn)
+            val aiMsg = ChatMessage(
+                text = response.replyEn,
+                isUser = false,
+                grammarCorrection = response.correctionHe,
+                interactiveQuiz = response.interactiveQuiz
+            )
+            messages = messages + aiMsg
+            speechManager.speak(
+                response.interactiveQuiz?.questionEn ?: response.replyEn
+            )
+        }
+    }
+
+    // בקשה ישירה ליצירת מבחן אמריקאי / אינטראקציה חיה בצ'אט
+    fun triggerInteractiveAiActivity(typeKey: String, labelHe: String) {
+        if (isSending) return
+        val userMsg = ChatMessage(text = "Please create a live interactive $labelHe for me!", isUser = true)
+        messages = messages + userMsg
+        isSending = true
+
+        scope.launch {
+            val response = conversationRepo.generateInteractiveChatChallenge(typeKey, inputText)
+            isSending = false
+            val aiMsg = ChatMessage(
+                text = response.replyEn,
+                isUser = false,
+                interactiveQuiz = response.interactiveQuiz
+            )
+            messages = messages + aiMsg
+            speechManager.speak(response.interactiveQuiz?.questionEn ?: response.replyEn)
+        }
+    }
+
+    // גיבוי לחלונית זיהוי קולי של אנדרואיד במקרה ששירות הרקע תפוס
+    val fallbackSpeechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.RESULTS_RECOGNITION)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+            if (spoken.isNotEmpty()) {
+                inputText = spoken
+                sendMessage(spoken)
+            }
+        }
+    }
+
+    fun beginVoiceRecording() {
+        voiceStatusBanner = "מקשיב באנגלית... דבר כעת (לחץ שוב לעצירה)"
+        speechManager.startListening(
+            onPartialResult = { partial ->
+                inputText = partial
+            },
+            onResult = { finalSpoken ->
+                voiceStatusBanner = null
+                inputText = finalSpoken
+                sendMessage(finalSpoken)
+            },
+            onFallbackIntentNeeded = { intent ->
+                voiceStatusBanner = null
+                runCatching { fallbackSpeechLauncher.launch(intent) }
+            },
+            onError = { errMsg ->
+                voiceStatusBanner = errMsg
+            }
+        )
+    }
+
+    // בקשת הרשאת מיקרופון בזמן ריצה
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            beginVoiceRecording()
+        } else {
+            voiceStatusBanner = "נדרשת הרשאת מיקרופון כדי להשתמש בהקלדה הקולית"
         }
     }
 
@@ -95,71 +200,237 @@ fun FreeFlowChatScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Brush.verticalGradient(listOf(DarkBg, Color(0xFF10172A), DarkBg)))
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
+            // --- סרגל עליון עם כפתור השתקה דו-מצבי פעיל ומגיב ---
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(modifier = Modifier.clickable { onOpenDrawer() }) {
-                    CanvaIconBadge(accentColor = TealNeon, badgeSize = 42.dp) {
+                    CanvaIconBadge(accentColor = TealNeon, badgeSize = 44.dp) {
                         CanvaMenuIcon(tint = TealNeon)
                     }
                 }
+
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "צ'אט דיבור חופשי מול AI",
+                        text = "צ'אט דיבור חופשי + מבחני AI",
                         color = Color.White,
-                        fontSize = 18.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                     Text(
-                        text = if (isSending) "ה-AI מנתח ומנסח תשובה..." else "מוכן לשיחה באנגלית",
-                        color = if (isSending) PurpleNeon else TealNeon,
+                        text = when {
+                            isListeningMic -> "מקליט קול באנגלית..."
+                            isSending -> "ה-AI בונה תגובה..."
+                            isMuted -> "קול מושתק (לחץ על הרמקול להפעלה)"
+                            else -> "קול פעיל • לחיצה ארוכה על הודעה לתרגום"
+                        },
+                        color = when {
+                            isListeningMic -> ErrorCrimson
+                            isMuted -> StarGold
+                            else -> TealNeon
+                        },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-                Box(modifier = Modifier.clickable { speechManager.stop() }) {
-                    CanvaIconBadge(accentColor = StarGold, badgeSize = 42.dp) {
-                        SpeakerVectorIcon(tint = StarGold, isMuted = true, modifier = Modifier.size(20.dp))
+
+                // כפתור ההשתקה הדו-מצבי עם סמל קנבה תואם למצב (מושתק / לא מושתק)
+                Box(
+                    modifier = Modifier.clickable {
+                        val nowMuted = speechManager.toggleMute()
+                        voiceStatusBanner = if (nowMuted) {
+                            "ההקראה הקולית הושתקה"
+                        } else {
+                            "ההקראה הקולית הופעלה"
+                        }
+                    }
+                ) {
+                    CanvaIconBadge(
+                        accentColor = if (isMuted) ErrorCrimson else TealNeon,
+                        badgeSize = 44.dp,
+                        isActive = true
+                    ) {
+                        CanvaSoundToggleIcon(
+                            isMuted = isMuted,
+                            isSpeakingNow = isSpeakingNow,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
             }
 
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // --- סרגל אינטראקציות חיות ומבחנים אמריקאיים שה-AI מייצר בזמן אמת בתוך הצ'אט ---
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+            ) {
+                InteractiveChipButton(
+                    title = "מבחן אמריקאי חי",
+                    accentColor = StarGold,
+                    onClick = { triggerInteractiveAiActivity("MULTIPLE_CHOICE", "מבחן אמריקאי") }
+                )
+                InteractiveChipButton(
+                    title = "השלמת משפט חסר",
+                    accentColor = TealNeon,
+                    onClick = { triggerInteractiveAiActivity("FILL_BLANK", "אתגר השלמת משפט") }
+                )
+                InteractiveChipButton(
+                    title = "זיהוי משפט תקין",
+                    accentColor = PurpleNeon,
+                    onClick = { triggerInteractiveAiActivity("GRAMMAR_FIX", "חידון דקדוק") }
+                )
+                InteractiveChipButton(
+                    title = "אתגר אוצר מילים",
+                    accentColor = CheckNeon,
+                    onClick = { triggerInteractiveAiActivity("VOCAB_CHALLENGE", "אתגר אוצר מילים") }
+                )
+            }
+
+            // באנר חיווי הקלטה / קול
+            AnimatedVisibility(
+                visible = voiceStatusBanner != null,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CardDark)
+                        .border(1.dp, if (isListeningMic) ErrorCrimson else TealNeon, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    CanvaSparkleIcon(tint = if (isListeningMic) ErrorCrimson else TealNeon, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = voiceStatusBanner ?: "",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // --- רשימת ההודעות והמבחנים האינטראקטיביים בצ'אט ---
             LazyColumn(
                 state = listState,
-                modifier = Modifier.weight(1f).padding(vertical = 12.dp),
+                modifier = Modifier.weight(1f).padding(vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(messages) { msg ->
+                itemsIndexed(messages, key = { _, m -> m.id }) { index, msg ->
+                    val isMenuOpen = longPressedMsgId == msg.id
+                    val isTranslatingThis = translatingMsgId == msg.id
+
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = if (msg.isUser) Alignment.End else Alignment.Start
                     ) {
+                        // בועת ההודעה (לחיצה רגילה = השמעה בקול, לחיצה ארוכה = פתיחת כפתור תרגום קנבה!)
                         Box(
                             modifier = Modifier
-                                .widthIn(max = 310.dp)
+                                .widthIn(max = 315.dp)
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(if (msg.isUser) TealDark else CardDark)
                                 .border(
-                                    1.5.dp,
-                                    if (msg.isUser) TealNeon else PurpleNeon.copy(alpha = 0.7f),
-                                    RoundedCornerShape(18.dp)
+                                    width = if (isMenuOpen) 2.dp else 1.5.dp,
+                                    color = when {
+                                        isMenuOpen -> StarGold
+                                        msg.isUser -> TealNeon
+                                        else -> PurpleNeon.copy(alpha = 0.75f)
+                                    },
+                                    shape = RoundedCornerShape(18.dp)
                                 )
-                                .clickable { if (!msg.isUser) speechManager.speak(msg.text) }
+                                .combinedClickable(
+                                    onClick = {
+                                        speechManager.speak(msg.text, forceEvenIfMuted = false)
+                                    },
+                                    onLongClick = {
+                                        longPressedMsgId = if (longPressedMsgId == msg.id) null else msg.id
+                                    }
+                                )
                                 .padding(14.dp)
                         ) {
-                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            Column {
+                                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                    Text(
+                                        text = msg.text,
+                                        color = Color.White,
+                                        fontSize = 16.sp,
+                                        lineHeight = 22.sp
+                                    )
+                                }
+
+                                // תוצאת התרגום משרת גוגל מוצגת בתוך הבועה
+                                if (!msg.translatedHe.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    HorizontalDivider(color = StarGold.copy(alpha = 0.35f))
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        CanvaTranslateIcon(tint = StarGold, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = msg.translatedHe,
+                                            color = StarGold,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            lineHeight = 20.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // --- כפתור תרגום מעוצב בקנבה שנפתח בלחיצה ארוכה על ההודעה ---
+                        AnimatedVisibility(
+                            visible = isMenuOpen,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(top = 6.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(Color(0xFF1A2238))
+                                    .border(1.5.dp, StarGold, RoundedCornerShape(14.dp))
+                                    .clickable(enabled = !isTranslatingThis) {
+                                        translatingMsgId = msg.id
+                                        scope.launch {
+                                            val translated = conversationRepo.translateTextOnline(msg.text)
+                                            val updated = messages.toMutableList()
+                                            updated[index] = msg.copy(translatedHe = translated)
+                                            messages = updated
+                                            translatingMsgId = null
+                                            longPressedMsgId = null
+                                        }
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CanvaIconBadge(accentColor = StarGold, badgeSize = 28.dp, cornerRadius = 8.dp) {
+                                    CanvaTranslateIcon(tint = StarGold, modifier = Modifier.size(16.dp))
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = msg.text,
-                                    color = Color.White,
-                                    fontSize = 16.sp,
-                                    lineHeight = 22.sp
+                                    text = if (isTranslatingThis) "מתרגם דרך שרת גוגל..." else "תרגם הודעה זו לעברית (Google Translate)",
+                                    color = StarGold,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.ExtraBold
                                 )
                             }
                         }
+
+                        // משוב דקדוק אוטומטי אם המשתמש טעה
                         if (msg.grammarCorrection != null) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Row(
@@ -180,10 +451,21 @@ fun FreeFlowChatScreen(
                                 )
                             }
                         }
+
+                        // --- ווידג'ט מבחן אמריקאי / אינטראקציה חיה בתוך הצ'אט ---
+                        if (msg.interactiveQuiz != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            InChatInteractiveQuizCard(
+                                quiz = msg.interactiveQuiz,
+                                onSpeakOption = { speechManager.speak(it) },
+                                onRequestAnotherQuiz = {
+                                    triggerInteractiveAiActivity("MULTIPLE_CHOICE", "מבחן אמריקאי נוסף")
+                                }
+                            )
+                        }
                     }
                 }
 
-                // --- בועת אנימציית "ה-AI חושב..." עם סמל הקנבה המונפש ---
                 if (isSending) {
                     item {
                         AiThinkingBubble()
@@ -191,36 +473,36 @@ fun FreeFlowChatScreen(
                 }
             }
 
+            // --- שורת הקלדה וכפתור מיקרופון מונפש בקנבה ---
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // כפתור ההקלדה הקולית עם אנימציית סונאר ואקוולייזר חי
                 Box(
                     modifier = Modifier.clickable(enabled = !isSending) {
-                        if (!isRecording) {
-                            isRecording = true
-                            speechManager.startListening(
-                                onResult = { spoken, _ ->
-                                    isRecording = false
-                                    sendMessage(spoken)
-                                },
-                                onError = { isRecording = false }
-                            )
+                        if (isListeningMic) {
+                            speechManager.stopListening()
+                            voiceStatusBanner = null
+                        } else {
+                            val hasMicPerm = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+
+                            if (hasMicPerm) {
+                                beginVoiceRecording()
+                            } else {
+                                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
                         }
                     }
                 ) {
-                    CanvaIconBadge(
-                        accentColor = if (isRecording) ErrorCrimson else TealNeon,
-                        badgeSize = 48.dp,
-                        cornerRadius = 24.dp,
-                        isActive = !isSending
-                    ) {
-                        CanvaMicIcon(
-                            tint = if (isRecording) ErrorCrimson else TealNeon,
-                            isRecording = isRecording,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                    CanvaVoiceOrbButton(
+                        isRecording = isListeningMic,
+                        voiceLevel = liveVoiceLevel,
+                        modifier = Modifier.size(52.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -231,8 +513,13 @@ fun FreeFlowChatScreen(
                     enabled = !isSending,
                     placeholder = {
                         Text(
-                            if (isSending) "ה-AI חושב..." else "הקלד או הקלט באנגלית...",
-                            color = Color.Gray
+                            text = when {
+                                isListeningMic -> "מדבר כעת... (אמור משפט באנגלית)"
+                                isSending -> "ה-AI חושב..."
+                                else -> "הקלד או הקלט (למשל: עשה לי מבחן אמריקאי)"
+                            },
+                            color = if (isListeningMic) ErrorCrimson else Color.Gray,
+                            fontSize = 13.sp
                         )
                     },
                     modifier = Modifier.weight(1f),
@@ -240,7 +527,7 @@ fun FreeFlowChatScreen(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
                         disabledTextColor = Color.Gray,
-                        focusedBorderColor = TealNeon,
+                        focusedBorderColor = if (isListeningMic) ErrorCrimson else TealNeon,
                         unfocusedBorderColor = Color.Gray.copy(alpha = 0.4f)
                     )
                 )
@@ -269,7 +556,213 @@ fun FreeFlowChatScreen(
     }
 }
 
-// קומפוננטת האנימציה של ה-AI בזמן מחשבה וניתוח דקדוק
+@Composable
+fun InteractiveChipButton(
+    title: String,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(CardDark)
+            .border(1.2.dp, accentColor.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 11.dp, vertical = 7.dp)
+    ) {
+        CanvaQuizIcon(tint = accentColor, modifier = Modifier.size(15.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = title,
+            color = accentColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+// כרטיס מבחן אמריקאי / אינטראקציה חיה שמופיע ישירות בתוך זרם הצ'אט
+@Composable
+fun InChatInteractiveQuizCard(
+    quiz: InteractiveChatQuiz,
+    onSpeakOption: (String) -> Unit,
+    onRequestAnotherQuiz: () -> Unit
+) {
+    var selectedIdx by remember { mutableStateOf<Int?>(null) }
+    var showHebrewHint by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(2.dp, StarGold.copy(alpha = 0.85f), RoundedCornerShape(22.dp)),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF161E35))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CanvaQuizIcon(tint = StarGold, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = quiz.typeTitleHe,
+                        color = StarGold,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF232B45))
+                        .border(1.dp, TealNeon.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                        .clickable { showHebrewHint = !showHebrewHint }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    CanvaTranslateIcon(tint = TealNeon, modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = if (showHebrewHint) "הסתר תרגום" else "תרגם שאלה",
+                        color = TealNeon,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Text(
+                    text = quiz.questionEn,
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    lineHeight = 24.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSpeakOption(quiz.questionEn) }
+                )
+            }
+
+            if (showHebrewHint) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = quiz.questionHe,
+                    color = StarGold,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            quiz.optionsEn.forEachIndexed { idx, optText ->
+                val isSelected = selectedIdx == idx
+                val isCorrect = idx == quiz.correctIndex
+
+                val bg = when {
+                    selectedIdx == null -> Color(0xFF1E2746)
+                    isCorrect -> Color(0xFF0E3B2E)
+                    isSelected -> Color(0xFF3B121E)
+                    else -> Color(0xFF141A2E)
+                }
+
+                val borderCol = when {
+                    selectedIdx == null -> TealNeon.copy(alpha = 0.45f)
+                    isCorrect -> CheckNeon
+                    isSelected -> ErrorCrimson
+                    else -> Color.Gray.copy(alpha = 0.25f)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(bg)
+                        .border(1.5.dp, borderCol, RoundedCornerShape(14.dp))
+                        .clickable(enabled = selectedIdx == null) {
+                            selectedIdx = idx
+                            onSpeakOption(optText)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 11.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            Text(
+                                text = "${('A' + idx)}. $optText",
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        if (selectedIdx != null) {
+                            if (isCorrect) {
+                                CanvaCheckIcon(tint = CheckNeon, modifier = Modifier.size(18.dp))
+                            } else if (isSelected) {
+                                CanvaCloseIcon(tint = ErrorCrimson, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (selectedIdx != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                val won = selectedIdx == quiz.correctIndex
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (won) CheckNeon.copy(alpha = 0.15f) else ErrorCrimson.copy(alpha = 0.15f))
+                        .border(1.dp, if (won) CheckNeon else ErrorCrimson, RoundedCornerShape(12.dp))
+                        .padding(10.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = if (won) "תשובה נכונה!" else "לא מדויק — התשובה הנכונה מודגשת בירוק:",
+                            color = if (won) CheckNeon else ErrorCrimson,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = quiz.explanationHe,
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = onRequestAnotherQuiz,
+                    colors = ButtonDefaults.buttonColors(containerColor = TealDark),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    CanvaRefreshIcon(tint = TealNeon, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("בקש מה-AI שאלה אמריקאית נוספת", color = TealNeon, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun AiThinkingBubble() {
     val infiniteTransition = rememberInfiniteTransition(label = "thinkingBars")
@@ -403,7 +896,7 @@ fun SpellingPracticeScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Box(modifier = Modifier.clickable { speechManager.speak(currentWord.english) }) {
+                    Box(modifier = Modifier.clickable { speechManager.speak(currentWord.english, forceEvenIfMuted = true) }) {
                         CanvaIconBadge(accentColor = TealNeon, badgeSize = 60.dp, cornerRadius = 30.dp) {
                             SpeakerVectorIcon(tint = TealNeon, isMuted = false, modifier = Modifier.size(28.dp))
                         }
@@ -480,9 +973,6 @@ fun SpellingPracticeScreen(
     }
 }
 
-// -------------------------------------------------------------
-// 3. אתגר 60 שניות מהיר עם ענישה וחיווי מיידי על טעויות
-// -------------------------------------------------------------
 @Composable
 fun SpeedChallengeScreen(
     words: List<WordCard>,
@@ -501,7 +991,6 @@ fun SpeedChallengeScreen(
     var currentIdx by remember { mutableIntStateOf(0) }
     var highScore by remember { mutableIntStateOf(repo.getSpeedHighScore()) }
 
-    // מצב חיווי וענישה לאחר בחירה
     var selectedAnswer by remember { mutableStateOf<String?>(null) }
     var isAnswerLocked by remember { mutableStateOf(false) }
     var feedbackBanner by remember { mutableStateOf<String?>(null) }
@@ -550,7 +1039,6 @@ fun SpeedChallengeScreen(
                 isAnswerLocked = false
             }
         } else {
-            // ענישה על תשובה שגויה: הורדת 5 נקודות, קנס של 2 שניות בשעון, איפוס רצף ורעידת הכרטיס!
             wrongCount++
             comboStreak = 0
             score = (score - 5).coerceAtLeast(0)
@@ -562,7 +1050,7 @@ fun SpeedChallengeScreen(
                     cardShakeX.animateTo(if (i % 2 == 0) 20f else -20f, tween(35))
                 }
                 cardShakeX.animateTo(0f, spring())
-                delay(550) // משאיר את התשובה הנכונה מסומנת בירוק והשגויה באדום כדי שהמשתמש יראה וילמד
+                delay(550)
                 selectedAnswer = null
                 feedbackBanner = null
                 currentIdx = (currentIdx + 1) % words.size
@@ -687,7 +1175,6 @@ fun SpeedChallengeScreen(
                     }
                 }
             } else {
-                // סרגל זמן, ניקוד חי ורצף
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -730,7 +1217,6 @@ fun SpeedChallengeScreen(
                         trackColor = CardDark
                     )
 
-                    // באנר משוב מיידי על הצלחה או ענישה
                     AnimatedVisibility(
                         visible = feedbackBanner != null,
                         enter = expandVertically() + fadeIn(),
@@ -770,7 +1256,6 @@ fun SpeedChallengeScreen(
                     }
                 }
 
-                // כרטיס המילה באנגלית (רועד באדום במקרה של תשובה שגויה)
                 val cardBorderColor = when {
                     selectedAnswer == null -> TealNeon
                     lastWasCorrect -> CheckNeon
@@ -798,7 +1283,6 @@ fun SpeedChallengeScreen(
                     }
                 }
 
-                // כפתורי האפשרויות עם סימון ירוק לתשובה הנכונה ואדום לתשובה השגויה
                 Column(modifier = Modifier.fillMaxWidth()) {
                     for (opt in options) {
                         val isThisSelected = selectedAnswer == opt
@@ -806,8 +1290,8 @@ fun SpeedChallengeScreen(
 
                         val buttonBgColor = when {
                             selectedAnswer == null -> Color(0xFF182038)
-                            isThisCorrectOption -> Color(0xFF0E3B2E) // מדגיש תמיד את התשובה הנכונה בירוק
-                            isThisSelected && !isThisCorrectOption -> Color(0xFF3B121E) // מדגיש את הטעות שנבחרה באדום
+                            isThisCorrectOption -> Color(0xFF0E3B2E)
+                            isThisSelected && !isThisCorrectOption -> Color(0xFF3B121E)
                             else -> Color(0xFF14192B)
                         }
 
