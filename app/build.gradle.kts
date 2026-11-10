@@ -3,6 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val ciRunNumber = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
+val computedVersionCode = 100 + ciRunNumber
+
 android {
     namespace = "com.example.englishtutor"
     compileSdk = 34
@@ -11,16 +14,30 @@ android {
         applicationId = "com.example.englishtutor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 4
-        versionName = "4.0"
+        versionCode = computedVersionCode
+        versionName = "5.0.$ciRunNumber"
 
-        // שומר אך ורק משאבים בעברית ובאנגלית להקטנת הקובץ
         resourceConfigurations += listOf("en", "iw", "he")
+    }
+
+    signingConfigs {
+        create("persistentSign") {
+            val ksFile = file("persistent-release-key.jks")
+            if (ksFile.exists()) {
+                storeFile = ksFile
+                storePassword = "EnglishTutor2026"
+                keyAlias = "english_tutor_key"
+                keyPassword = "EnglishTutor2026"
+            }
+        }
     }
 
     buildTypes {
         debug {
-            // החזרת דחיסת קוד ומשאבים מלאה עבור ה-APK שנבנה בגיטהאב
+            val ksFile = file("persistent-release-key.jks")
+            if (ksFile.exists()) {
+                signingConfig = signingConfigs.getByName("persistentSign")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -29,6 +46,10 @@ android {
             )
         }
         release {
+            val ksFile = file("persistent-release-key.jks")
+            if (ksFile.exists()) {
+                signingConfig = signingConfigs.getByName("persistentSign")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
