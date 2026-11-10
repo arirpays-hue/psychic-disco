@@ -53,16 +53,17 @@ class WordRepository(private val context: Context) {
     private val learnedBlacklist = mutableSetOf<String>()
     private val hardCooldownMap = mutableMapOf<String, Int>()
     private val recentHistory = mutableListOf<String>()
+    private val speedAttackRecentHistory = ArrayDeque<String>(60)
     private var stepCounter: Int = prefs.getInt("global_step_counter", 0)
     private var isFetchingAiBatch = false
 
-    // מאגר גיבוי ענק של מילים ברמה גבוהה למקרה של ניתוק אינטרנט רגעי
+    // מאגר מילים עשיר ומובנה שמתמזג אוטומטית כדי שיהיו עשרות שאלות שונות ומגוונות מיד!
     private val builtInExpansionPool = listOf(
-        WordCard("negotiate", "לנהל משא ומתן", "B2", "עסקים"),
-        WordCard("inevitable", "בלתי נמנע", "C1", "מתקדם"),
-        WordCard("obstacle", "מכשול", "B1", "יומיום"),
-        WordCard("accurate", "מדויק", "B1", "מדע"),
-        WordCard("enthusiasm", "התלהבות", "B2", "רגשות"),
+        WordCard("Negotiate", "לנהל משא ומתן", "B2", "עסקים"),
+        WordCard("Inevitable", "בלתי נמנע", "C1", "מתקדם"),
+        WordCard("Obstacle", "מכשול", "B1", "יומיום"),
+        WordCard("Accurate", "מדויק", "B1", "מדע"),
+        WordCard("Enthusiasm", "התלהבות", "B2", "רגשות"),
         WordCard("Breakthrough", "פריצת דרך", "B2", "טכנולוגיה"),
         WordCard("Comprehensive", "מקיף / יסודי", "C1", "אקדמיה"),
         WordCard("Reluctant", "מהסס / חסר רצון", "C1", "רגשות"),
@@ -83,13 +84,115 @@ class WordRepository(private val context: Context) {
         WordCard("Consequence", "השלכה / תוצאה", "B2", "יומיום"),
         WordCard("Profound", "עמוק / מעמיק", "C1", "פילוסופיה"),
         WordCard("Resilient", "בעל חוסן / עמיד", "B2", "אישיות"),
-        WordCard("crucial", "מכריע / קריטי", "B2", "עסקים"),
-        WordCard("phenomenon", "תופעה", "B2", "מדע"),
-        WordCard("integrity", "יושרה", "C1", "אישיות"),
-        WordCard("distinguish", "להבחין / להבדיל", "B2", "חשיבה"),
-        WordCard("perseverance", "התמדה ונחישות", "C1", "אישיות"),
-        WordCard("fluctuate", "להשתנות / להתנדנד", "C1", "כלכלה"),
-        WordCard("incentive", "תמריץ", "B2", "כלכלה")
+        WordCard("Crucial", "מכריע / קריטי", "B2", "עסקים"),
+        WordCard("Phenomenon", "תופעה", "B2", "מדע"),
+        WordCard("Integrity", "יושרה", "C1", "אישיות"),
+        WordCard("Distinguish", "להבחין / להבדיל", "B2", "חשיבה"),
+        WordCard("Perseverance", "התמדה ונחישות", "C1", "אישיות"),
+        WordCard("Fluctuate", "להשתנות / להתנדנד", "C1", "כלכלה"),
+        WordCard("Incentive", "תמריץ", "B2", "כלכלה"),
+        WordCard("Abundant", "שופע / מצוי בשפע", "C1", "טבע"),
+        WordCard("Acknowledge", "להכיר ב- / להודות", "B2", "תקשורת"),
+        WordCard("Acquire", "לרכוש / להשיג", "B2", "עסקים"),
+        WordCard("Adapt", "להסתגל / להתאים", "B1", "חיים"),
+        WordCard("Adequate", "נאות / מספק", "B2", "כללי"),
+        WordCard("Advocate", "לתמוך / לסנגר", "C1", "משפט"),
+        WordCard("Anticipate", "לצפות מראש", "B2", "חשיבה"),
+        WordCard("Apparent", "ברור / גלוי לעין", "B2", "תיאור"),
+        WordCard("Approach", "גישה / להתקרב", "B1", "כללי"),
+        WordCard("Appropriate", "מתאים / הולם", "B1", "חברה"),
+        WordCard("Approve", "לאשר", "B1", "עסקים"),
+        WordCard("Artificial", "מלאכותי", "B1", "טכנולוגיה"),
+        WordCard("Assess", "להעריך / לאמוד", "B2", "ניהול"),
+        WordCard("Assumption", "הנחת יסוד", "B2", "חשיבה"),
+        WordCard("Astonishing", "מדהים / מפליא", "B2", "רגשות"),
+        WordCard("Authentic", "אותנטי / מקורי", "B2", "תרבות"),
+        WordCard("Authority", "סמכות / רשות", "B2", "ממשל"),
+        WordCard("Awareness", "מודעות", "B2", "פסיכולוגיה"),
+        WordCard("Barrier", "מחסום", "B2", "כללי"),
+        WordCard("Beneficial", "מועיל", "B2", "בריאות"),
+        WordCard("Capacity", "קיבולת / יכולת", "B2", "תעשייה"),
+        WordCard("Challenging", "מאתגר", "B1", "קריירה"),
+        WordCard("Circumstance", "נסיבה / מצב", "B2", "חיים"),
+        WordCard("Clarify", "להבהיר", "B2", "תקשורת"),
+        WordCard("Commitment", "מחויבות", "B2", "אישיות"),
+        WordCard("Comparison", "השוואה", "B1", "מחקר"),
+        WordCard("Compensate", "לפצות", "B2", "כלכלה"),
+        WordCard("Complex", "מורכב / מסובך", "B1", "מדע"),
+        WordCard("Component", "רכיב / מרכיב", "B2", "טכנולוגיה"),
+        WordCard("Concentrate", "להתרכז", "B1", "לימודים"),
+        WordCard("Concept", "מושג / רעיון", "B1", "חשיבה"),
+        WordCard("Conclusion", "מסקנה", "B1", "מחקר"),
+        WordCard("Confidence", "ביטחון עצמי", "B1", "אישיות"),
+        WordCard("Confirm", "לאמת / לאשר", "B1", "תקשורת"),
+        WordCard("Conflict", "סכסוך / ניגוד", "B1", "חברה"),
+        WordCard("Conscious", "מודע / בהכרה", "B2", "רפואה"),
+        WordCard("Consistent", "עקבי", "B2", "אישיות"),
+        WordCard("Constant", "קבוע / מתמיד", "B1", "מדע"),
+        WordCard("Contribute", "לתרום", "B1", "חברה"),
+        WordCard("Convenient", "נוח / זמין", "B1", "יומיום"),
+        WordCard("Convince", "לשכנע", "B1", "תקשורת"),
+        WordCard("Courage", "אומץ לב", "B1", "אישיות"),
+        WordCard("Curiosity", "סקרנות", "B1", "חשיבה"),
+        WordCard("Deadline", "תאריך יעד סופי", "B1", "עבודה"),
+        WordCard("Decade", "עשור", "B1", "זמן"),
+        WordCard("Decline", "לסרב / לרדת", "B2", "כלכלה"),
+        WordCard("Dedicate", "להקדיש", "B2", "אישיות"),
+        WordCard("Deficiency", "מחסור / ליקוי", "C1", "רפואה"),
+        WordCard("Demonstrate", "להדגים / להפגין", "B2", "חינוך"),
+        WordCard("Desperate", "נואש", "B2", "רגשות"),
+        WordCard("Determine", "לקבוע / להחליט", "B1", "חשיבה"),
+        WordCard("Devote", "להתמסר / להקדיש", "B2", "חיים"),
+        WordCard("Dilemma", "דילמה / התלבטות", "B2", "חשיבה"),
+        WordCard("Diminish", "להפחית / להצטמצם", "C1", "מתקדם"),
+        WordCard("Disappointment", "אכזבה", "B1", "רגשות"),
+        WordCard("Discipline", "משמעת", "B2", "חינוך"),
+        WordCard("Diverse", "מגוון", "B2", "תרבות"),
+        WordCard("Domestic", "מקומי / ביתי", "B2", "כלכלה"),
+        WordCard("Dominant", "דומיננטי / שולט", "B2", "טבע"),
+        WordCard("Dramatic", "דרמטי / חד", "B1", "תיאור"),
+        WordCard("Durable", "עמיד לאורך זמן", "B2", "תעשייה"),
+        WordCard("Eager", "להוט / משתוקק", "B2", "רגשות"),
+        WordCard("Efficient", "יעיל", "B1", "עבודה"),
+        WordCard("Eliminate", "לחסל / להסיר", "B2", "ניהול"),
+        WordCard("Emerge", "להגיח / לצוץ", "B2", "טבע"),
+        WordCard("Emphasis", "דגש", "B2", "תקשורת"),
+        WordCard("Encounter", "להיתקל ב- / מפגש", "B2", "חיים"),
+        WordCard("Enhance", "לשפר / להעצים", "B2", "טכנולוגיה"),
+        WordCard("Enormous", "ענק / עצום", "B1", "תיאור"),
+        WordCard("Ensure", "להבטיח / לוודא", "B1", "עבודה"),
+        WordCard("Entire", "שלם / כל ה-", "B1", "כללי"),
+        WordCard("Environment", "סביבה", "A2", "טבע"),
+        WordCard("Equivalent", "שווה ערך", "B2", "מדע"),
+        WordCard("Essential", "חיוני / הכרחי", "B1", "יומיום"),
+        WordCard("Establish", "להקים / לבסס", "B2", "עסקים"),
+        WordCard("Estimate", "להעריך / אומדן", "B1", "כלכלה"),
+        WordCard("Evaluate", "לאמוד / להעריך", "B2", "מחקר"),
+        WordCard("Eventually", "בסופו של דבר", "B1", "זמן"),
+        WordCard("Evidence", "ראיה / הוכחה", "B1", "משפט"),
+        WordCard("Exaggerate", "להגזים", "B2", "תקשורת"),
+        WordCard("Exceed", "לחרוג / לעלות על", "B2", "כלכלה"),
+        WordCard("Exception", "יוצא מן הכלל", "B1", "כללי"),
+        WordCard("Exhausted", "מותש לחלוטין", "B1", "בריאות"),
+        WordCard("Expand", "להתרחב / להרחיב", "B1", "עסקים"),
+        WordCard("Expectation", "ציפייה", "B1", "רגשות"),
+        WordCard("Expense", "הוצאה כספית", "B1", "כלכלה"),
+        WordCard("Expertise", "מומחיות", "B2", "קריירה"),
+        WordCard("Expose", "לחשוף", "B2", "תקשורת"),
+        WordCard("Extensive", "נרחב / מקיף", "B2", "מחקר"),
+        WordCard("extraordinary", "יוצא דופן", "B2", "תיאור"),
+        WordCard("Facility", "מתקן / מבנה", "B2", "תעשייה"),
+        WordCard("Fascinating", "מרתק", "B1", "תרבות"),
+        WordCard("Feasible", "בר-ביצוע / אפשרי", "C1", "ניהול"),
+        WordCard("Flexible", "גמיש", "B1", "עבודה"),
+        WordCard("Flourish", "לשגשג / לפרוח", "C1", "כלכלה"),
+        WordCard("Foundation", "יסוד / תשתית", "B2", "מבנה"),
+        WordCard("Fragile", "שביר / עדין", "B2", "חפצים"),
+        WordCard("Frequent", "תכוף / שכיח", "B1", "זמן"),
+        WordCard("Frustration", "תסכול", "B2", "רגשות"),
+        WordCard("Fulfill", "להגשים / למלא", "B2", "חיים"),
+        WordCard("Fundamental", "בסיסי / יסודי", "B2", "מדע"),
+        WordCard("Generous", "נדיב", "B1", "אישיות")
     )
 
     @Synchronized
@@ -99,7 +202,7 @@ class WordRepository(private val context: Context) {
         learnedBlacklist.clear()
         hardCooldownMap.clear()
 
-        // 1. טעינת המילים המובנות מ-words.json
+        // 1. טעינת המילים מקובץ ה-JSON המובנה
         try {
             val jsonString = context.assets.open("words.json").bufferedReader().use { it.readText() }
             val jsonArray = JSONArray(jsonString)
@@ -108,7 +211,7 @@ class WordRepository(private val context: Context) {
             e.printStackTrace()
         }
 
-        // 2. טעינת כל המילים שה-AI הוסיף אוטומטית ברקע בסשנים קודמים
+        // 2. טעינת מילים שה-AI שמר ברקע
         try {
             val aiSavedWordsJson = prefs.getString("ai_background_words_json", "[]") ?: "[]"
             val aiArray = JSONArray(aiSavedWordsJson)
@@ -117,9 +220,30 @@ class WordRepository(private val context: Context) {
             e.printStackTrace()
         }
 
-        if (wordList.isEmpty()) {
-            wordList.add(WordCard("Resilience", "חוסן נפשי / עמידות", "B2", "פסיכולוגיה"))
+        // 3. מיזוג מאגר ההרחבה המובנה (120+ מילים) כדי שלעולם לא יהיה מחסור בשאלות!
+        for (extra in builtInExpansionPool) {
+            val key = extra.normalizedKey
+            if (seenKeys.add(key)) {
+                val isLearned = prefs.getBoolean("${key}_learned", false)
+                val isHard = prefs.getBoolean("${key}_hard", false) && !isLearned
+                val dueStep = prefs.getInt("${key}_due_step", 0)
+
+                if (isLearned) learnedBlacklist.add(key)
+                if (isHard && dueStep > stepCounter) hardCooldownMap[key] = dueStep
+
+                wordList.add(
+                    extra.copy(
+                        isLearned = isLearned,
+                        isHard = isHard,
+                        timesSeen = prefs.getInt("${key}_seen", 0),
+                        hardCount = prefs.getInt("${key}_hard_count", 0),
+                        scheduledAtStep = dueStep,
+                        lastSeenTimestamp = prefs.getLong("${key}_last", 0L)
+                    )
+                )
+            }
         }
+
         return wordList
     }
 
@@ -166,14 +290,48 @@ class WordRepository(private val context: Context) {
         }
     }
 
-    // --- מנוע AI שקט ברקע שמוסיף מילים ושאלות חדשות למבחן האיות ולאתגר 60 השניות מבלי שיראו! ---
+    // הגרלה אקראית חכמה למצב 60 השניות: לעולם לא חוזרת על שאלה שכבר נשאלה בסבבים האחרונים!
+    @Synchronized
+    fun pickRandomNonRepeatingWord(
+        allWords: List<WordCard>,
+        sessionAskedKeys: Set<String>
+    ): WordCard {
+        val randomSeed = Random(System.nanoTime())
+
+        // מסנן החוצה מילים שכבר נשאלו במשחק הנוכחי וגם מילים שנשאלו ב-50 השאלות האחרונות
+        val freshCandidates = allWords.filter { card ->
+            val key = card.normalizedKey
+            !sessionAskedKeys.contains(key) && !speedAttackRecentHistory.contains(key)
+        }
+
+        val chosen = when {
+            freshCandidates.isNotEmpty() -> freshCandidates.random(randomSeed)
+            else -> {
+                // אם המשתמש עבר על כל המאגר, מנקים את ההיסטוריה הישנה אבל שומרים שלא יחזור על מה שנשאל בסשן הנוכחי
+                speedAttackRecentHistory.clear()
+                val notInThisSession = allWords.filter { !sessionAskedKeys.contains(it.normalizedKey) }
+                if (notInThisSession.isNotEmpty()) notInThisSession.random(randomSeed)
+                else allWords.random(randomSeed)
+            }
+        }
+
+        val chosenKey = chosen.normalizedKey
+        speedAttackRecentHistory.remove(chosenKey)
+        speedAttackRecentHistory.addLast(chosenKey)
+        while (speedAttackRecentHistory.size > 55) {
+            speedAttackRecentHistory.removeFirst()
+        }
+
+        return chosen
+    }
+
     suspend fun fetchInfiniteAiWordsSilently(existingWords: List<WordCard>): List<WordCard> = withContext(Dispatchers.IO) {
         if (isFetchingAiBatch) return@withContext emptyList()
         isFetchingAiBatch = true
 
         try {
             val existingSet = existingWords.map { it.normalizedKey }.toHashSet()
-            val sampleExisting = existingWords.shuffled().take(15).joinToString(", ") { it.english }
+            val sampleExisting = existingWords.shuffled(Random(System.nanoTime())).take(15).joinToString(", ") { it.english }
 
             val onlineWords = runCatching {
                 val url = URL("https://text.pollinations.ai/openai")
@@ -187,14 +345,14 @@ class WordRepository(private val context: Context) {
                 }
 
                 val systemPrompt = """
-                    Return ONLY a valid JSON array of 8 useful English vocabulary words for Hebrew speakers.
+                    Return ONLY a valid JSON array of 10 useful English vocabulary words for Hebrew speakers.
                     No markdown, no explanations.
                     Each object must have: "english" (single pure English word), "hebrew" (concise accurate Hebrew translation), "cefr" ("A2", "B1", "B2", or "C1"), "category" (Hebrew category).
                     Do not include these words: $sampleExisting.
                 """.trimIndent()
 
                 val userPrompt = """
-                    Generate 8 fresh English words for spelling and speed quiz:
+                    Generate 10 fresh random English words (Seed ${System.nanoTime()}):
                     [{"english":"...", "hebrew":"...", "cefr":"B2", "category":"כללי"}]
                 """.trimIndent()
 
@@ -205,7 +363,7 @@ class WordRepository(private val context: Context) {
                 val body = JSONObject().apply {
                     put("model", "openai-fast")
                     put("messages", messages)
-                    put("temperature", 0.85)
+                    put("temperature", 0.95)
                 }
 
                 OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
@@ -240,17 +398,10 @@ class WordRepository(private val context: Context) {
                 parsed
             }.getOrDefault(emptyList())
 
-            val finalNewWords = if (onlineWords.isNotEmpty()) {
-                onlineWords
-            } else {
-                // גיבוי שקט מהמאגר הפנימי אם אין אינטרנט באותו רגע
-                builtInExpansionPool.filter { !existingSet.contains(it.normalizedKey) }.shuffled().take(5)
+            if (onlineWords.isNotEmpty()) {
+                saveNewAiWordsToPrefs(onlineWords)
             }
-
-            if (finalNewWords.isNotEmpty()) {
-                saveNewAiWordsToPrefs(finalNewWords)
-            }
-            return@withContext finalNewWords
+            return@withContext onlineWords
         } finally {
             isFetchingAiBatch = false
         }
