@@ -34,6 +34,7 @@ fun SettingsScreen(
     speechManager: SpeechManager,
     haptic: HapticManager,
     onOpenDrawer: () -> Unit,
+    onBackToMain: () -> Unit,
     onDeckGenerated: (List<WordCard>) -> Unit
 ) {
     val context = LocalContext.current
@@ -68,7 +69,6 @@ fun SettingsScreen(
                 .padding(horizontal = 18.dp, vertical = 14.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // סרגל עליון עם סמלי קנבה
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -86,25 +86,32 @@ fun SettingsScreen(
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "הגדרות ומחולל מילים AI",
+                        text = "הגדרות והתאמה אישית",
                         color = Color.White,
                         fontSize = 19.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                     Text(
-                        text = "התאמת קול, רטט, גיבוי והוספת כרטיסיות",
+                        text = "קול, רטט, גיבוי והוספת כרטיסיות ב-AI",
                         color = StarGold,
                         fontSize = 11.sp
                     )
                 }
-                CanvaIconBadge(accentColor = StarGold, badgeSize = 44.dp) {
-                    CanvaSettingsIcon(tint = StarGold, modifier = Modifier.size(22.dp))
+                Box(
+                    modifier = Modifier.clickable {
+                        haptic.click()
+                        onBackToMain()
+                    }
+                ) {
+                    CanvaIconBadge(accentColor = PurpleNeon, badgeSize = 44.dp) {
+                        CanvaBackArrowIcon(tint = PurpleNeon, modifier = Modifier.size(22.dp))
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // --- כרטיס 1: הוספת מילים חדשות באמצעות AI ---
+            // כרטיס 1: הוספת מילים חדשות באמצעות AI
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -126,7 +133,7 @@ fun SettingsScreen(
                                 fontSize = 16.sp
                             )
                             Text(
-                                text = "הקלד נושא או בחר מהרשימה ליצירת כרטיסיות חדשות",
+                                text = "הקלד נושא ליצירת חבילת כרטיסיות מותאמת אישית",
                                 color = Color.LightGray,
                                 fontSize = 12.sp
                             )
@@ -232,7 +239,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- כרטיס 2: בקרת שמע, קול ורטט ---
+            // כרטיס 2: בקרת שמע, קול ורטט
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -318,7 +325,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- כרטיס 3: גיבוי, ייצוא וייבוא נתונים ---
+            // כרטיס 3: גיבוי, ייצוא וייבוא נתונים
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -382,7 +389,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- כרטיס 4: מפתח API אישי ---
+            // כרטיס 4: מפתח API אישי
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
