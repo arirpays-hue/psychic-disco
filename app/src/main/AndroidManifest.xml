@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- הרשאות רשת, הקלטת מיקרופון ורטט משוב (Haptics) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- חובה באנדרואיד 11+ לזיהוי מנוע ההקראה (TTS) וזיהוי קולי שקט בתוך האפליקציה -->
     <queries>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
@@ -35,6 +38,7 @@
             </intent-filter>
         </activity>
 
+        <!-- רישום הווידג'ט של "מילת היום" למסך הבית -->
         <receiver
             android:name=".WordWidgetReceiver"
             android:exported="true">
