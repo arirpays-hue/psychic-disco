@@ -1,7 +1,30 @@
 package com.example.englishtutor
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseInOutSine
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,11 +35,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -271,22 +289,20 @@ fun FlashcardScreen(
         label = "borderColor"
     )
 
-    // פונקציה מאוחדת שמעדכנת את המילה הנוכחית ומחליפה אותה מיידית בלי לאפשר לה להיבחר שוב
     fun handleWordActionAndAdvance(learned: Boolean? = null, hard: Boolean? = null, exitDirection: Float = 0f) {
         if (isTransitioning) return
         val wordBeingHandled = latestWord ?: return
         val previousEnglish = wordBeingHandled.english
 
-        // עדכון מיידי של המאגר והרשימה השחורה *לפני* תחילת האנימציה
         repository.recordReview(wordBeingHandled, learned = learned, hard = hard)
 
         if (learned == true) {
             comboStreak++
-            statusBannerText = "✓ '${previousEnglish}' הוסרה לצמיתות!"
+            statusBannerText = "המילה '${previousEnglish}' הוסרה לצמיתות מהתור"
             triggerConfetti()
         } else if (hard == true) {
             comboStreak = 0
-            statusBannerText = "⚡ '${previousEnglish}' תחזור לתרגול בעוד מספר כרטיסים"
+            statusBannerText = "המילה '${previousEnglish}' תחזור לתרגול בהמשך"
             triggerHardShake()
         }
         uiVersion++
@@ -389,7 +405,6 @@ fun FlashcardScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // --- חלק עליון עם כפתור פתיחת תפריט צד ---
                 Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -397,19 +412,10 @@ fun FlashcardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = onOpenDrawer,
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(CardDark)
-                                    .border(1.5.dp, TealNeon, RoundedCornerShape(12.dp))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Menu,
-                                    contentDescription = "פתח תפריט קטגוריות",
-                                    tint = TealNeon
-                                )
+                            Box(modifier = Modifier.clickable { onOpenDrawer() }) {
+                                CanvaIconBadge(accentColor = TealNeon, badgeSize = 42.dp) {
+                                    CanvaMenuIcon(tint = TealNeon)
+                                }
                             }
 
                             Spacer(modifier = Modifier.width(10.dp))
@@ -450,15 +456,19 @@ fun FlashcardScreen(
                                 enter = scaleIn(spring(Spring.DampingRatioHighBouncy)) + fadeIn(),
                                 exit = scaleOut() + fadeOut()
                             ) {
-                                Text(
-                                    text = "🔥 x$comboStreak",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = StarGold,
-                                    modifier = Modifier
-                                        .padding(end = 10.dp)
-                                        .scale(breathingScale)
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(end = 10.dp).scale(breathingScale)
+                                ) {
+                                    CanvaFlameIcon(tint = StarGold)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "x$comboStreak",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = StarGold
+                                    )
+                                }
                             }
 
                             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(42.dp)) {
@@ -505,7 +515,7 @@ fun FlashcardScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        StudyFilter.entries.forEach { filter ->
+                        for (filter in StudyFilter.entries) {
                             val isSelected = selectedFilter == filter
                             val chipScale by animateFloatAsState(
                                 targetValue = if (isSelected) 1.05f else 0.96f,
@@ -550,16 +560,19 @@ fun FlashcardScreen(
                         enter = expandVertically() + fadeIn(),
                         exit = shrinkVertically() + fadeOut()
                     ) {
-                        Box(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(CardDark.copy(alpha = 0.9f))
                                 .border(1.dp, TealNeon.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
-                                .padding(vertical = 6.dp),
-                            contentAlignment = Alignment.Center
+                                .padding(vertical = 6.dp, horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
+                            CanvaDiamondIcon(tint = TealNeon, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = statusBannerText ?: "",
                                 fontSize = 13.sp,
@@ -570,7 +583,6 @@ fun FlashcardScreen(
                     }
                 }
 
-                // --- חלק מרכזי: הכרטיסייה או מסך הסיום ---
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -747,17 +759,25 @@ fun FlashcardScreen(
                                                     }
 
                                                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                                                        Text(
-                                                            text = when {
-                                                                isCurrentHard -> "⚡ מילה לחיזוק ($currentHardTimes)"
-                                                                isCurrentLearned -> "✓ נלמדה לצמיתות"
-                                                                currentSeen == 0 -> "✨ מילה חדשה"
-                                                                else -> "בתהליך למידה ($currentSeen)"
-                                                            },
-                                                            fontSize = 13.sp,
-                                                            color = dynamicBorderColor,
-                                                            fontWeight = FontWeight.SemiBold
-                                                        )
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            when {
+                                                                isCurrentHard -> CanvaBoltIcon(tint = StarGold, modifier = Modifier.size(16.dp))
+                                                                isCurrentLearned -> CanvaCheckIcon(tint = CheckNeon, modifier = Modifier.size(16.dp))
+                                                                else -> CanvaSparkleIcon(tint = TealNeon, modifier = Modifier.size(16.dp))
+                                                            }
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text(
+                                                                text = when {
+                                                                    isCurrentHard -> "מילה לחיזוק ($currentHardTimes)"
+                                                                    isCurrentLearned -> "נלמדה לצמיתות"
+                                                                    currentSeen == 0 -> "מילה חדשה [${word.cefr}]"
+                                                                    else -> "בתהליך למידה ($currentSeen)"
+                                                                },
+                                                                fontSize = 13.sp,
+                                                                color = dynamicBorderColor,
+                                                                fontWeight = FontWeight.SemiBold
+                                                            )
+                                                        }
                                                     }
                                                 }
 
@@ -781,8 +801,8 @@ fun FlashcardScreen(
 
                                                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                                                     val swipeStamp = when {
-                                                        rawDragX > 90f -> "✓ שחרר: הובן (לא תחזור לעולם)"
-                                                        rawDragX < -90f -> "★ שחרר: קשה (תוחזר בהמשך)"
+                                                        rawDragX > 90f -> "שחרר לסימון: הובן (לא תחזור לעולם)"
+                                                        rawDragX < -90f -> "שחרר לסימון: קשה (תוחזר בהמשך)"
                                                         else -> "לחץ להיפוך • החלק ימינה (נלמד) או שמאלה (קשה)"
                                                     }
                                                     Text(
@@ -821,7 +841,7 @@ fun FlashcardScreen(
                                                 Spacer(modifier = Modifier.height(18.dp))
                                                 OutlinedButton(
                                                     onClick = { onSpeakWord(latestWord?.english) },
-                                                    border = androidx.compose.foundation.BorderStroke(1.dp, TealNeon)
+                                                    border = BorderStroke(1.dp, TealNeon)
                                                 ) {
                                                     SpeakerVectorIcon(
                                                         tint = TealNeon,
@@ -858,7 +878,6 @@ fun FlashcardScreen(
                     }
                 }
 
-                // --- חלק תחתון: כפתורי פעולה ---
                 if (currentWord != null) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
@@ -877,12 +896,7 @@ fun FlashcardScreen(
                                     handleWordActionAndAdvance(learned = true, exitDirection = 1f)
                                 }
                             ) { tint ->
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = "נלמד",
-                                    tint = tint,
-                                    modifier = Modifier.size(26.dp)
-                                )
+                                CanvaCheckIcon(tint = tint, modifier = Modifier.size(26.dp))
                             }
 
                             BouncyActionIcon(
@@ -906,12 +920,7 @@ fun FlashcardScreen(
                                     handleWordActionAndAdvance(hard = true, exitDirection = -1f)
                                 }
                             ) { tint ->
-                                Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = "קשה",
-                                    tint = tint,
-                                    modifier = Modifier.size(26.dp)
-                                )
+                                CanvaStarIcon(tint = tint, isFilled = isCurrentHard, modifier = Modifier.size(26.dp))
                             }
                         }
 
@@ -1097,7 +1106,7 @@ fun VictoryCelebrationScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = if (isAllWordsMastered) "🏆 אלוף! סיימת את כל המאגר!" else "✨ סיימת קטגוריה זו!",
+                    text = if (isAllWordsMastered) "אלוף! סיימת את כל המאגר!" else "סיימת קטגוריה זו!",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White,
@@ -1128,11 +1137,7 @@ fun VictoryCelebrationScreen(
                         .border(2.dp, StarGold, RoundedCornerShape(27.dp)),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B2200))
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = null,
-                        tint = StarGold
-                    )
+                    CanvaRefreshIcon(tint = StarGold, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "אפס הכל והתחל סבב לימוד חדש",
@@ -1150,7 +1155,7 @@ fun VictoryCelebrationScreen(
                         .fillMaxWidth()
                         .height(48.dp),
                     shape = RoundedCornerShape(24.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.5.dp, TealNeon)
+                    border = BorderStroke(1.5.dp, TealNeon)
                 ) {
                     Text(
                         text = "עבור למצב עיון בכל המילים",
@@ -1303,17 +1308,11 @@ fun BouncyActionIcon(
             .scale(pressScale)
             .clickable(interactionSource = interactionSource, indication = null) { onClick() }
     ) {
-        Box(
-            modifier = Modifier
-                .size(58.dp)
-                .clip(CircleShape)
-                .background(if (isActive) activeColor.copy(alpha = 0.24f) else CardDark)
-                .border(
-                    width = 2.dp,
-                    color = if (isActive) activeColor else Color.Gray.copy(alpha = 0.35f),
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
+        CanvaIconBadge(
+            accentColor = activeColor,
+            badgeSize = 58.dp,
+            cornerRadius = 18.dp,
+            isActive = isActive
         ) {
             iconContent(if (isActive) activeColor else Color.LightGray)
         }
