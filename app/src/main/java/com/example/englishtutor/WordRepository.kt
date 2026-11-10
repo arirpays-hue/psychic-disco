@@ -5,16 +5,21 @@ import android.content.SharedPreferences
 import org.json.JSONArray
 import kotlin.random.Random
 
-enum class StudyFilter(val label: String) {
-    SMART("תור חכם"),
-    UNLEARNED("לא נלמדו"),
-    HARD("קשות בלבד"),
-    ALL("הכל")
+enum class CefrLevel(val label: String) {
+    ALL("כל הרמות"),
+    A1("A1 - מתחילים"),
+    A2("A2 - בסיסי"),
+    B1("B1 - בינוני"),
+    B2("B2 - מתקדם"),
+    C1("C1 - שולט"),
+    C2("C2 - מומחה")
 }
 
 data class WordCard(
     val english: String,
     val hebrew: String,
+    val cefr: String = "A1",
+    val category: String = "יומיום",
     var isLearned: Boolean = false,
     var isHard: Boolean = false,
     var timesSeen: Int = 0,
@@ -28,17 +33,11 @@ data class WordCard(
 
 class WordRepository(private val context: Context) {
     private val prefs: SharedPreferences =
-        context.getSharedPreferences("smart_words_prefs_v2", Context.MODE_PRIVATE)
+        context.getSharedPreferences("smart_words_prefs_v3", Context.MODE_PRIVATE)
 
-    // רשימה שחורה מיידית בזיכרון למילים שנלמדו - מונעת ב-100% חזרה שלהן
     private val learnedBlacklist = HashSet<String>()
-
-    // מפת קירור קשיחה למילים שסומנו כקשות (שומרת באיזה צעד מותר להציג אותן שוב)
     private val hardCooldownMap = HashMap<String, Int>()
-
-    // היסטוריית 8 המילים האחרונות שהוצגו כדי למנוע לופים חוזרים
     private val recentHistory = ArrayDeque<String>(10)
-
     private var stepCounter: Int = prefs.getInt("global_step_counter", 0)
 
     @Synchronized
@@ -49,15 +48,15 @@ class WordRepository(private val context: Context) {
         hardCooldownMap.clear()
 
         try {
-            val jsonString = context.assets.open("words.json").bufferedReader().use { reader ->
-                reader.readText()
-            }
+            val jsonString = context.assets.open("words.json").bufferedReader().use { it.readText() }
             val jsonArray = JSONArray(jsonString)
 
             for (i in 0 until jsonArray.length()) {
                 val item = jsonArray.optJSONObject(i) ?: continue
                 val english = item.optString("english", "").trim()
                 val hebrew = item.optString("hebrew", "").trim()
+                val cefr = item.optString("cefr", "A1").trim()
+                val category = item.optString("category", "כללי").trim()
                 val key = english.lowercase()
 
                 if (english.isNotEmpty() && hebrew.isNotEmpty() && seenKeys.add(key)) {
@@ -65,17 +64,15 @@ class WordRepository(private val context: Context) {
                     val isHard = prefs.getBoolean("${key}_hard", false) && !isLearned
                     val dueStep = prefs.getInt("${key}_due_step", 0)
 
-                    if (isLearned) {
-                        learnedBlacklist.add(key)
-                    }
-                    if (isHard && dueStep > stepCounter) {
-                        hardCooldownMap[key] = dueStep
-                    }
+                    if (isLearned) learnedBlacklist.add(key)
+                    if (isHard && dueStep > stepCounter) hardCooldownMap[key] = dueStep
 
                     wordList.add(
                         WordCard(
                             english = english,
                             hebrew = hebrew,
+                            cefr = cefr,
+                            category = category,
                             isLearned = isLearned,
                             isHard = isHard,
                             timesSeen = prefs.getInt("${key}_seen", 0),
@@ -91,7 +88,7 @@ class WordRepository(private val context: Context) {
         }
 
         if (wordList.isEmpty()) {
-            wordList.add(WordCard("Resilience", "חוסן נפשי / עמידות"))
+            wordList.add(WordCard("Resilience", "חוסן נפשי / עמידות", "B2", "פסיכולוגיה"))
         }
         return wordList
     }
@@ -103,12 +100,9 @@ class WordRepository(private val context: Context) {
         word.timesSeen++
         word.lastSeenTimestamp = System.currentTimeMillis()
 
-        // הוספה מיידית להיסטוריה כדי שלא תוגרל שוב בצעד הבא
         recentHistory.remove(key)
         recentHistory.addLast(key)
-        while (recentHistory.size > 8) {
-            recentHistory.removeFirst()
-        }
+        while (recentHistory.size > 8) recentHistory.removeFirst()
 
         when {
             learned == true -> {
@@ -123,14 +117,12 @@ class WordRepository(private val context: Context) {
                 word.isLearned = false
                 word.hardCount++
                 learnedBlacklist.remove(key)
-                // מרחיק את המילה הקשה ל-6 עד 9 כרטיסים קדימה כדי שלא תחזור מיד בלופ!
                 val cooldownSteps = Random.nextInt(6, 10)
                 val nextAllowedStep = stepCounter + cooldownSteps
                 word.scheduledAtStep = nextAllowedStep
                 hardCooldownMap[key] = nextAllowedStep
             }
         }
-
         saveWordState(word)
     }
 
@@ -178,72 +170,41 @@ class WordRepository(private val context: Context) {
     fun pickNextSmartWord(
         allWords: List<WordCard>,
         filter: StudyFilter,
-        excludedEnglish: String?
+        excludedEnglish: String?,
+        selectedCefr: CefrLevel = CefrLevel.ALL
     ): WordCard? {
         if (allWords.isEmpty()) return null
+
+        val levelFiltered = if (selectedCefr == CefrLevel.ALL) allWords
+        else allWords.filter { it.cefr.equals(selectedCefr.name, ignoreCase = true) }
+
+        val pool = levelFiltered.ifEmpty { allWords }
         val excludedKey = excludedEnglish?.trim()?.lowercase()
 
-        if (!excludedKey.isNullOrEmpty()) {
-            recentHistory.remove(excludedKey)
-            recentHistory.addLast(excludedKey)
-            while (recentHistory.size > 8) {
-                recentHistory.removeFirst()
-            }
-        }
-
-        // שלב 1: סינון קשיח - מילים שנלמדו לעולם לא נכנסות לתור הלמידה
         val candidates = when (filter) {
-            StudyFilter.SMART, StudyFilter.UNLEARNED -> allWords.filter { card ->
-                !card.isLearned && !learnedBlacklist.contains(card.normalizedKey)
-            }
-            StudyFilter.HARD -> allWords.filter { card ->
-                card.isHard && !card.isLearned && !learnedBlacklist.contains(card.normalizedKey)
-            }
-            StudyFilter.ALL -> allWords
+            StudyFilter.SMART, StudyFilter.UNLEARNED -> pool.filter { !it.isLearned && !learnedBlacklist.contains(it.normalizedKey) }
+            StudyFilter.HARD -> pool.filter { it.isHard && !it.isLearned && !learnedBlacklist.contains(it.normalizedKey) }
+            StudyFilter.ALL -> pool
         }
 
         if (candidates.isEmpty()) return null
-        if (candidates.size == 1) return candidates.first()
+        val withoutCurrent = candidates.filter { it.normalizedKey != excludedKey }.ifEmpty { candidates }
 
-        // מסנן החוצה את המילה שכרגע היתה על המסך
-        val withoutCurrent = candidates.filter { it.normalizedKey != excludedKey }
-        val pool = withoutCurrent.ifEmpty { candidates }
-
-        // מסנן החוצה מילים שנמצאות ב"קירור" (כאלו שסומנו כקשות ב-6 הצעדים האחרונים או נראו לאחרונה)
-        val readyPool = pool.filter { card ->
+        return withoutCurrent.maxByOrNull { card ->
             val key = card.normalizedKey
-            val cooldownUntil = hardCooldownMap[key] ?: 0
-            val notInHardCooldown = stepCounter >= cooldownUntil
-            val notInRecentHistory = !recentHistory.contains(key)
-            notInHardCooldown && notInRecentHistory
-        }
-
-        // אם יש מילים פנויות שלא בקירור - נבחר מתוכן. אם נשארו מעט מילים במאגר - נשחרר לפי הסדר הישן ביותר
-        val finalSelectionPool = when {
-            readyPool.isNotEmpty() -> readyPool
-            else -> pool.sortedBy { card ->
-                val historyIndex = recentHistory.indexOf(card.normalizedKey)
-                val cooldownLeft = (hardCooldownMap[card.normalizedKey] ?: 0) - stepCounter
-                (if (historyIndex == -1) -100 else historyIndex * 10) + cooldownLeft.coerceAtLeast(0)
-            }
-        }
-
-        return finalSelectionPool.maxByOrNull { card ->
-            val key = card.normalizedKey
-            val dueStep = hardCooldownMap[key] ?: card.scheduledAtStep
             var score = 100.0
+            if (card.isHard && stepCounter >= (hardCooldownMap[key] ?: 0)) score += 200.0
+            if (card.timesSeen == 0) score += 80.0
+            score + Random.nextDouble(-10.0, 10.0)
+        }
+    }
 
-            if (card.isHard && stepCounter >= dueStep) {
-                // מילה קשה שסיימה את תקופת ההמתנה שלה חוזרת לתרגול
-                score += 220.0 + (card.hardCount * 10.0).coerceAtMost(50.0)
-            } else if (card.timesSeen == 0) {
-                // עדיפות גבוהה למילים חדשות שעוד לא נראו
-                score += 90.0
-            } else {
-                score += (40.0 - card.timesSeen * 6.0).coerceAtLeast(5.0)
-            }
+    fun getSpeedHighScore(): Int = prefs.getInt("speed_challenge_high_score", 0)
 
-            score + Random.nextDouble(-8.0, 8.0)
+    fun saveSpeedHighScore(score: Int) {
+        val current = getSpeedHighScore()
+        if (score > current) {
+            prefs.edit().putInt("speed_challenge_high_score", score).apply()
         }
     }
 }
