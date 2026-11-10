@@ -13,15 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -86,7 +77,6 @@ fun ConversationScreen(
     var scorePoints by remember { mutableIntStateOf(0) }
     var wrongTextsInCurrentNode by remember { mutableStateOf(emptySet<String>()) }
 
-    // מצב תרגום לעברית - עובד מיד בלחיצה על הכפתור או על בועת הטקסט
     var showHebrewTranslation by remember { mutableStateOf(false) }
     var lastFeedback by remember { mutableStateOf("") }
     var lastChoiceOptimal by remember { mutableStateOf(true) }
@@ -136,21 +126,16 @@ fun ConversationScreen(
                 .background(Brush.verticalGradient(listOf(DarkBg, Color(0xFF10172A), DarkBg)))
                 .padding(horizontal = 18.dp, vertical = 14.dp)
         ) {
-            // סרגל עליון
+            // סרגל עליון עם סמלי קנבה מותאמים אישית
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = onOpenDrawer,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(CardDark)
-                        .border(1.5.dp, TealNeon.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                ) {
-                    Icon(Icons.Default.Menu, contentDescription = "תפריט", tint = TealNeon)
+                Box(modifier = Modifier.clickable { onOpenDrawer() }) {
+                    CanvaIconBadge(accentColor = TealNeon, badgeSize = 44.dp) {
+                        CanvaMenuIcon(tint = TealNeon)
+                    }
                 }
 
                 Column(
@@ -174,29 +159,21 @@ fun ConversationScreen(
                 }
 
                 if (activeScenario != null) {
-                    IconButton(
-                        onClick = {
+                    Box(
+                        modifier = Modifier.clickable {
                             activeScenarioId = ""
                             lastFeedback = ""
-                        },
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(CardDark)
-                            .border(1.dp, PurpleNeon, RoundedCornerShape(12.dp))
+                        }
                     ) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "חזור לרשימה", tint = PurpleNeon)
+                        CanvaIconBadge(accentColor = PurpleNeon, badgeSize = 44.dp) {
+                            CanvaBackArrowIcon(tint = PurpleNeon)
+                        }
                     }
                 } else {
-                    IconButton(
-                        onClick = { showApiKeyDialog = true },
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(CardDark)
-                            .border(1.dp, StarGold.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                    ) {
-                        Icon(Icons.Default.Settings, contentDescription = "הגדרות מנוע AI", tint = StarGold)
+                    Box(modifier = Modifier.clickable { showApiKeyDialog = true }) {
+                        CanvaIconBadge(accentColor = StarGold, badgeSize = 44.dp) {
+                            CanvaSettingsIcon(tint = StarGold)
+                        }
                     }
                 }
             }
@@ -216,10 +193,10 @@ fun ConversationScreen(
                         .border(1.5.dp, PurpleNeon, RoundedCornerShape(18.dp)),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1F1638))
                 ) {
-                    Icon(Icons.Default.Star, contentDescription = null, tint = StarGold)
+                    CanvaSparkleIcon(tint = StarGold, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "✨ צור שיחה חדשה בהתאמה אישית עם AI (מקוון)",
+                        text = "צור שיחה חדשה בהתאמה אישית עם AI (מקוון)",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White
@@ -340,17 +317,15 @@ fun ConversationScreen(
                                     )
                                 }
 
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isDone) CheckNeon.copy(0.2f) else TealDark),
-                                    contentAlignment = Alignment.Center
+                                CanvaIconBadge(
+                                    accentColor = if (isDone) CheckNeon else TealNeon,
+                                    badgeSize = 42.dp,
+                                    cornerRadius = 12.dp
                                 ) {
                                     if (isDone) {
-                                        Icon(Icons.Default.Check, contentDescription = "הושלם", tint = CheckNeon)
+                                        CanvaCheckIcon(tint = CheckNeon, modifier = Modifier.size(20.dp))
                                     } else {
-                                        Text("▶", color = TealNeon, fontSize = 16.sp)
+                                        CanvaPlayIcon(tint = TealNeon, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -359,7 +334,6 @@ fun ConversationScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             } else {
-                // --- מסך ניהול השיחה החיה ---
                 val node = activeScenario.nodes[currentNodeId] ?: activeScenario.nodes.values.first()
                 val totalStages = (activeScenario.nodes.size - 1).coerceAtLeast(1)
                 val nodeKey = "${activeScenario.id}_${node.id}"
@@ -371,18 +345,15 @@ fun ConversationScreen(
                     combined.distinctBy { optionItem -> optionItem.textEn.lowercase() }.shuffled()
                 }
 
-                // שורת לבבות ומד התקדמות
+                // שורת לבבות מעוצבים ומד התקדמות
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         for (i in 1..3) {
-                            Text(
-                                text = if (i <= livesRemaining) "❤️" else "🖤",
-                                fontSize = 18.sp
-                            )
+                            CanvaHeartIcon(isActive = i <= livesRemaining, modifier = Modifier.size(20.dp))
                         }
                     }
 
@@ -418,8 +389,12 @@ fun ConversationScreen(
                                 modifier = Modifier.padding(24.dp).fillMaxWidth(),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
+                                CanvaIconBadge(accentColor = ErrorCrimson, badgeSize = 56.dp, cornerRadius = 16.dp) {
+                                    CanvaCloseIcon(tint = ErrorCrimson, modifier = Modifier.size(28.dp))
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "💔 השיחה הסתיימה ללא הצלחה",
+                                    text = "השיחה הסתיימה ללא הצלחה",
                                     fontSize = 22.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = ErrorCrimson
@@ -445,7 +420,7 @@ fun ConversationScreen(
                                     colors = ButtonDefaults.buttonColors(containerColor = TealDark),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, tint = TealNeon)
+                                    CanvaRefreshIcon(tint = TealNeon, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("נסה שוב (בסדר תשובות מעורבב חדש)", color = TealNeon, fontWeight = FontWeight.Bold)
                                 }
@@ -465,7 +440,7 @@ fun ConversationScreen(
                                 .offset { IntOffset(shakeOffsetX.value.roundToInt(), 0) }
                         ) {
                             if (lastFeedback.isNotEmpty()) {
-                                Box(
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(bottom = 12.dp)
@@ -479,10 +454,17 @@ fun ConversationScreen(
                                             if (lastChoiceOptimal) CheckNeon else ErrorCrimson,
                                             RoundedCornerShape(14.dp)
                                         )
-                                        .padding(12.dp)
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    if (lastChoiceOptimal) {
+                                        CanvaCheckIcon(tint = CheckNeon, modifier = Modifier.size(18.dp))
+                                    } else {
+                                        CanvaCloseIcon(tint = ErrorCrimson, modifier = Modifier.size(18.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = lastFeedback,
+                                        text = lastFeedback.replace("✓", "").replace("✗", "").trim(),
                                         fontSize = 13.sp,
                                         color = if (lastChoiceOptimal) CheckNeon else ErrorCrimson,
                                         fontWeight = FontWeight.Bold
@@ -490,7 +472,7 @@ fun ConversationScreen(
                                 }
                             }
 
-                            // בועת הדיבור של הדמות (לחיצה על הכפתור או על הבועה מציגה/מסתירה את התרגום לעברית!)
+                            // בועת הדיבור של הדמות
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -505,32 +487,34 @@ fun ConversationScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = "🗣️ ${node.speakerName}",
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PurpleNeon
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            CanvaSpeakerBubbleIcon(tint = PurpleNeon, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = node.speakerName,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PurpleNeon
+                                            )
+                                        }
 
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            // כפתור תרגום בולט ומובטח שעובד בכל לחיצה
-                                            Box(
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
                                                 modifier = Modifier
                                                     .clip(RoundedCornerShape(12.dp))
                                                     .background(
                                                         if (showHebrewTranslation) StarGold.copy(alpha = 0.22f)
                                                         else Color(0xFF232B45)
                                                     )
-                                                    .border(
-                                                        1.dp,
-                                                        StarGold,
-                                                        RoundedCornerShape(12.dp)
-                                                    )
+                                                    .border(1.dp, StarGold, RoundedCornerShape(12.dp))
                                                     .clickable { showHebrewTranslation = !showHebrewTranslation }
                                                     .padding(horizontal = 10.dp, vertical = 6.dp)
                                             ) {
+                                                CanvaTranslateIcon(tint = StarGold, modifier = Modifier.size(15.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
                                                 Text(
-                                                    text = if (showHebrewTranslation) "הסתר תרגום עברי" else "🇮🇳 תרגם לעברית",
+                                                    text = if (showHebrewTranslation) "הסתר תרגום" else "תרגם לעברית",
                                                     color = StarGold,
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 12.sp
@@ -568,7 +552,6 @@ fun ConversationScreen(
                                         )
                                     }
 
-                                    // הצגה מיידית וברורה של התרגום לעברית (ללא תלות ב-AnimatedVisibility)
                                     if (showHebrewTranslation) {
                                         Spacer(modifier = Modifier.height(12.dp))
                                         HorizontalDivider(color = StarGold.copy(alpha = 0.4f))
@@ -607,8 +590,10 @@ fun ConversationScreen(
                                         modifier = Modifier.padding(22.dp).fillMaxWidth(),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
+                                        TrophyVectorIcon(tint = StarGold, modifier = Modifier.size(54.dp))
+                                        Spacer(modifier = Modifier.height(8.dp))
                                         Text(
-                                            text = "🏆 השלמת את כל שלבי השיחה!",
+                                            text = "השלמת את כל שלבי השיחה!",
                                             fontSize = 21.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = CheckNeon
@@ -632,7 +617,7 @@ fun ConversationScreen(
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = TealDark)
                                             ) {
-                                                Icon(Icons.Default.Refresh, contentDescription = null, tint = TealNeon)
+                                                CanvaRefreshIcon(tint = TealNeon, modifier = Modifier.size(18.dp))
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text("שחק שוב (מעורבב)", color = TealNeon)
                                             }
@@ -674,7 +659,7 @@ fun ConversationScreen(
                                                         aiStoreVersion++
                                                         shuffleSeed++
                                                         lastChoiceOptimal = true
-                                                        lastFeedback = "✨ מודל ה-AI הוסיף ${newOpts.size} אפשרויות חדשות וערבב את הרשימה!"
+                                                        lastFeedback = "מודל ה-AI הוסיף ${newOpts.size} אפשרויות חדשות וערבב את הרשימה"
                                                     }.onFailure {
                                                         lastChoiceOptimal = false
                                                         lastFeedback = "שגיאת חיבור ל-AI המקוון. בדוק חיבור אינטרנט."
@@ -693,13 +678,8 @@ fun ConversationScreen(
                                                 modifier = Modifier.size(14.dp)
                                             )
                                         } else {
-                                            Icon(
-                                                imageVector = Icons.Default.Add,
-                                                contentDescription = null,
-                                                tint = PurpleNeon,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
+                                            CanvaPlusIcon(tint = PurpleNeon, modifier = Modifier.size(13.dp))
+                                            Spacer(modifier = Modifier.width(5.dp))
                                             Text("תשובות AI", fontSize = 11.sp, color = PurpleNeon)
                                         }
                                     }
@@ -768,11 +748,7 @@ fun ConversationScreen(
 
                                             if (isAlreadyMarkedWrong) {
                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                Icon(
-                                                    imageVector = Icons.Default.Close,
-                                                    contentDescription = "שגוי",
-                                                    tint = ErrorCrimson
-                                                )
+                                                CanvaCloseIcon(tint = ErrorCrimson, modifier = Modifier.size(20.dp))
                                             }
                                         }
                                     }
@@ -784,7 +760,6 @@ fun ConversationScreen(
             }
         }
 
-        // --- דיאלוג יצירת שיחה חדשה באמצעות מודל AI מקוון ---
         if (showAiGeneratorDialog) {
             val quickTopics = listOf(
                 "בדיקה ביטחונית ותשאול מעמיק בשדה תעופה",
@@ -800,12 +775,16 @@ fun ConversationScreen(
                 onDismissRequest = { if (!isGeneratingScenario) showAiGeneratorDialog = false },
                 containerColor = CardDark,
                 title = {
-                    Text(
-                        text = "✨ מחולל שיחות AI מקוון",
-                        color = TealNeon,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 20.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CanvaSparkleIcon(tint = TealNeon, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "מחולל שיחות AI מקוון",
+                            color = TealNeon,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 20.sp
+                        )
+                    }
                 },
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
@@ -945,7 +924,6 @@ fun ConversationScreen(
             )
         }
 
-        // --- דיאלוג הגדרת מפתח API אופציונלי ---
         if (showApiKeyDialog) {
             var apiKeyInput by remember { mutableStateOf(repository.getCustomApiKey()) }
             AlertDialog(
