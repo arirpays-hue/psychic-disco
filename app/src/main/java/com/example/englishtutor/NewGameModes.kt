@@ -1,9 +1,7 @@
 package com.example.englishtutor
 
 import android.Manifest
-import android.app.Activity
 import android.content.pm.PackageManager
-import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -75,7 +73,7 @@ fun FreeFlowChatScreen(
         mutableStateOf(
             listOf(
                 ChatMessage(
-                    text = "Hello! I am your AI conversational partner. You can speak with the microphone, long-press any message to translate it, or ask me for a live Multiple-Choice Quiz!",
+                    text = "Hello! I am your AI conversational partner. Tap the microphone to speak directly inside the app, long-press any message to translate it, or tap a quiz button above!",
                     isUser = false
                 )
             )
@@ -85,7 +83,6 @@ fun FreeFlowChatScreen(
     var isSending by remember { mutableStateOf(false) }
     var voiceStatusBanner by remember { mutableStateOf("") }
 
-    // מזהה ההודעה שנלחצה בלחיצה ארוכה כדי להציג עבורה את כפתור התרגום של קנבה (-1 = סגור)
     var longPressedMsgId by remember { mutableLongStateOf(-1L) }
     var translatingMsgId by remember { mutableLongStateOf(-1L) }
 
@@ -145,26 +142,11 @@ fun FreeFlowChatScreen(
         }
     }
 
-    // גיבוי לחלונית זיהוי קולי של אנדרואיד (תוקן ל-RecognizerIntent.EXTRA_RESULTS)
-    val fallbackSpeechLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val spoken = result.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-                ?.trim()
-                .orEmpty()
-            if (spoken.isNotEmpty()) {
-                inputText = spoken
-                sendMessage(spoken)
-            }
-        }
-    }
-
-    fun beginVoiceRecording() {
-        voiceStatusBanner = "מקשיב באנגלית... דבר כעת (לחץ שוב לעצירה)"
-        speechManager.startListening(
+    // הפעלת הקלטה קולית שקטה בתוך האפליקציה בלבד (ללא חלון קופץ של גוגל!)
+    fun beginInAppVoiceRecording() {
+        voiceStatusBanner = "מקשיב באנגלית... דבר כעת (לחץ שוב על המיקרופון לסיום)"
+        speechManager.startListeningInApp(
+            activityContext = context,
             onPartialResult = { partial ->
                 inputText = partial
             },
@@ -172,10 +154,6 @@ fun FreeFlowChatScreen(
                 voiceStatusBanner = ""
                 inputText = finalSpoken
                 sendMessage(finalSpoken)
-            },
-            onFallbackIntentNeeded = { intent ->
-                voiceStatusBanner = ""
-                runCatching { fallbackSpeechLauncher.launch(intent) }
             },
             onError = { errMsg ->
                 voiceStatusBanner = errMsg
@@ -187,7 +165,7 @@ fun FreeFlowChatScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            beginVoiceRecording()
+            beginInAppVoiceRecording()
         } else {
             voiceStatusBanner = "נדרשת הרשאת מיקרופון כדי להשתמש בהקלדה הקולית"
         }
@@ -200,7 +178,6 @@ fun FreeFlowChatScreen(
                 .background(Brush.verticalGradient(listOf(DarkBg, Color(0xFF10172A), DarkBg)))
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            // סרגל עליון עם כפתור השתקה דו-מצבי פעיל ומגיב
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -221,7 +198,7 @@ fun FreeFlowChatScreen(
                     )
                     Text(
                         text = when {
-                            isListeningMic -> "מקליט קול באנגלית..."
+                            isListeningMic -> "מקליט קול חי באפליקציה..."
                             isSending -> "ה-AI בונה תגובה..."
                             isMuted -> "קול מושתק (לחץ על הרמקול להפעלה)"
                             else -> "קול פעיל • לחיצה ארוכה על הודעה לתרגום"
@@ -236,7 +213,6 @@ fun FreeFlowChatScreen(
                     )
                 }
 
-                // כפתור ההשתקה הדו-מצבי עם סמל קנבה תואם למצב (מושתק / לא מושתק)
                 Box(
                     modifier = Modifier.clickable {
                         val nowMuted = speechManager.toggleMute()
@@ -263,7 +239,6 @@ fun FreeFlowChatScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // סרגל אינטראקציות חיות ומבחנים אמריקאיים שה-AI מייצר בזמן אמת בתוך הצ'אט
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
@@ -319,7 +294,6 @@ fun FreeFlowChatScreen(
                 }
             }
 
-            // רשימת ההודעות והמבחנים האינטראקטיביים בצ'אט
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).padding(vertical = 10.dp),
@@ -386,7 +360,6 @@ fun FreeFlowChatScreen(
                             }
                         }
 
-                        // כפתור תרגום מעוצב בקנבה שנפתח בלחיצה ארוכה על ההודעה
                         AnimatedVisibility(
                             visible = isMenuOpen,
                             enter = expandVertically() + fadeIn(),
@@ -466,7 +439,7 @@ fun FreeFlowChatScreen(
                 }
             }
 
-            // שורת הקלדה וכפתור מיקרופון מונפש בקנבה
+            // שורת הקלדה וכפתור מיקרופון מונפש בקנבה (ללא שום חלונית חיצונית של גוגל!)
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -476,6 +449,9 @@ fun FreeFlowChatScreen(
                         if (isListeningMic) {
                             speechManager.stopListening()
                             voiceStatusBanner = ""
+                            if (inputText.isNotBlank()) {
+                                sendMessage(inputText)
+                            }
                         } else {
                             val hasMicPerm = ContextCompat.checkSelfPermission(
                                 context,
@@ -483,7 +459,7 @@ fun FreeFlowChatScreen(
                             ) == PackageManager.PERMISSION_GRANTED
 
                             if (hasMicPerm) {
-                                beginVoiceRecording()
+                                beginInAppVoiceRecording()
                             } else {
                                 micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             }
@@ -506,9 +482,9 @@ fun FreeFlowChatScreen(
                     placeholder = {
                         Text(
                             text = when {
-                                isListeningMic -> "מדבר כעת... (אמור משפט באנגלית)"
+                                isListeningMic -> "מקשיב לך... (רואים את המילים נכתבות כאן)"
                                 isSending -> "ה-AI חושב..."
-                                else -> "הקלד או הקלט (למשל: עשה לי מבחן אמריקאי)"
+                                else -> "הקלד או לחץ על המיקרופון לדיבור חי..."
                             },
                             color = if (isListeningMic) ErrorCrimson else Color.Gray,
                             fontSize = 13.sp
@@ -528,6 +504,9 @@ fun FreeFlowChatScreen(
 
                 Box(
                     modifier = Modifier.clickable(enabled = !isSending && inputText.isNotBlank()) {
+                        if (isListeningMic) {
+                            speechManager.stopListening()
+                        }
                         sendMessage(inputText)
                     }
                 ) {
@@ -841,17 +820,39 @@ fun AiThinkingBubble() {
     }
 }
 
+// -------------------------------------------------------------
+// 2. מבחן איות והקלדה אינסופי (ה-AI מוסיף שאלות ברקע באופן שקט!)
+// -------------------------------------------------------------
 @Composable
 fun SpellingPracticeScreen(
     words: List<WordCard>,
     speechManager: SpeechManager,
     onOpenDrawer: () -> Unit
 ) {
+    val context = LocalContext.current
+    val wordRepo = remember { WordRepository(context.applicationContext) }
+
+    // רשימה דינמית שמתרחבת בשקט ברקע על ידי ה-AI כך שלעולם לא ייגמרו השאלות!
+    var dynamicPool by remember { mutableStateOf(words.shuffled()) }
     var currentIndex by remember { mutableIntStateOf(0) }
-    val currentWord = words.getOrNull(currentIndex) ?: WordCard("Apple", "תפוח")
+    val currentWord = dynamicPool.getOrNull(currentIndex) ?: WordCard("Resilience", "חוסן נפשי")
+
     var typedInput by remember { mutableStateOf("") }
-    var resultState by remember { mutableIntStateOf(0) } // 0 = טרם נבדק, 1 = נכון, 2 = שגוי
+    var resultState by remember { mutableIntStateOf(0) }
     var score by remember { mutableIntStateOf(0) }
+
+    // בכל פעם שמתקרבים ל-4 השאלות האחרונות, ה-AI שואב ברקע מילים חדשות ומוסיף אותן בשקט לתור!
+    LaunchedEffect(currentIndex, dynamicPool.size) {
+        if (currentIndex >= dynamicPool.size - 4) {
+            val newAiWords = wordRepo.fetchInfiniteAiWordsSilently(dynamicPool)
+            if (newAiWords.isNotEmpty()) {
+                dynamicPool = dynamicPool + newAiWords
+            } else {
+                // אם כולן כבר נלמדו, מערבב תור חדש ברקע כדי שהמשחק ימשיך לנצח
+                dynamicPool = dynamicPool + words.shuffled()
+            }
+        }
+    }
 
     LaunchedEffect(currentWord.english) {
         speechManager.speak(currentWord.english)
@@ -893,7 +894,8 @@ fun SpellingPracticeScreen(
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(currentWord.hebrew, fontSize = 28.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(currentWord.hebrew, fontSize = 28.sp, color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text("הקשב והקלד את המילה באנגלית", fontSize = 13.sp, color = Color.Gray)
                 }
             }
@@ -954,7 +956,7 @@ fun SpellingPracticeScreen(
                     Button(onClick = {
                         typedInput = ""
                         resultState = 0
-                        currentIndex = (currentIndex + 1) % words.size
+                        currentIndex++
                     }) {
                         Text("המילה הבאה")
                     }
@@ -964,6 +966,9 @@ fun SpellingPracticeScreen(
     }
 }
 
+// -------------------------------------------------------------
+// 3. אתגר 60 שניות אינסופי (ה-AI מזריק שאלות חדשות ברקע בלי שיראו!)
+// -------------------------------------------------------------
 @Composable
 fun SpeedChallengeScreen(
     words: List<WordCard>,
@@ -972,14 +977,16 @@ fun SpeedChallengeScreen(
 ) {
     val scope = rememberCoroutineScope()
 
+    // מאגר שאלות אינסופי שמתמלא ברקע על ידי ה-AI בזמן המשחק!
+    var infiniteQueue by remember { mutableStateOf(words.shuffled()) }
+    var currentIdx by remember { mutableIntStateOf(0) }
+
     var timeLeft by remember { mutableIntStateOf(60) }
     var isRunning by remember { mutableStateOf(false) }
     var score by remember { mutableIntStateOf(0) }
     var comboStreak by remember { mutableIntStateOf(0) }
     var correctCount by remember { mutableIntStateOf(0) }
     var wrongCount by remember { mutableIntStateOf(0) }
-
-    var currentIdx by remember { mutableIntStateOf(0) }
     var highScore by remember { mutableIntStateOf(repo.getSpeedHighScore()) }
 
     var selectedAnswer by remember { mutableStateOf("") }
@@ -989,10 +996,26 @@ fun SpeedChallengeScreen(
 
     val cardShakeX = remember { Animatable(0f) }
 
-    val currentWord = words.getOrNull(currentIdx) ?: WordCard("Run", "לרוץ")
+    val currentWord = infiniteQueue.getOrNull(currentIdx) ?: WordCard("Run", "לרוץ")
 
-    val options = remember(currentIdx, words) {
-        val wrong = words.filter { it.hebrew != currentWord.hebrew }.shuffled().take(3).map { it.hebrew }
+    // שאיבה שקטה ברקע של מילים ושאלות חדשות מה-AI בכל פעם שמתקדמים בשאלות
+    LaunchedEffect(currentIdx, isRunning) {
+        if (currentIdx >= infiniteQueue.size - 6) {
+            val aiNewWords = repo.fetchInfiniteAiWordsSilently(infiniteQueue)
+            if (aiNewWords.isNotEmpty()) {
+                infiniteQueue = infiniteQueue + aiNewWords.shuffled()
+            } else {
+                infiniteQueue = infiniteQueue + words.shuffled()
+            }
+        }
+    }
+
+    val options = remember(currentIdx, infiniteQueue.size) {
+        val wrong = infiniteQueue
+            .filter { it.hebrew != currentWord.hebrew }
+            .shuffled()
+            .take(3)
+            .map { it.hebrew }
         (wrong + currentWord.hebrew).shuffled()
     }
 
@@ -1023,10 +1046,10 @@ fun SpeedChallengeScreen(
             score += bonus
             feedbackBanner = "+$bonus נקודות! תשובה נכונה"
             scope.launch {
-                delay(260)
+                delay(240)
                 selectedAnswer = ""
                 feedbackBanner = ""
-                currentIdx = (currentIdx + 1) % words.size
+                currentIdx++
                 isAnswerLocked = false
             }
         } else {
@@ -1041,10 +1064,10 @@ fun SpeedChallengeScreen(
                     cardShakeX.animateTo(if (i % 2 == 0) 20f else -20f, tween(35))
                 }
                 cardShakeX.animateTo(0f, spring())
-                delay(550)
+                delay(520)
                 selectedAnswer = ""
                 feedbackBanner = ""
-                currentIdx = (currentIdx + 1) % words.size
+                currentIdx++
                 isAnswerLocked = false
             }
         }
@@ -1154,6 +1177,7 @@ fun SpeedChallengeScreen(
                                 comboStreak = 0
                                 correctCount = 0
                                 wrongCount = 0
+                                currentIdx++
                                 isRunning = true
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = TealDark),
@@ -1161,7 +1185,7 @@ fun SpeedChallengeScreen(
                         ) {
                             CanvaRefreshIcon(tint = TealNeon, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("שחק שוב", color = TealNeon, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("שחק שוב (עם שאלות חדשות)", color = TealNeon, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         }
                     }
                 }
