@@ -63,12 +63,12 @@ class MainActivity : ComponentActivity() {
             var selectedAccent by remember { mutableStateOf(VoiceAccent.US) }
             var activeCefrFilter by remember { mutableStateOf(CefrLevel.ALL) }
 
-            // דיאלוג מהיר להוספת מילים ב-AI מכל מקום באפליקציה (עם אפקט טשטוש ברקע)
+            // דיאלוג מהיר להוספת מילים ב-AI מכל מקום באפליקציה
             var showQuickAiWordsDialog by remember { mutableStateOf(false) }
             var quickAiTopic by remember { mutableStateOf("") }
             var isGeneratingQuickWords by remember { mutableStateOf(false) }
 
-            // חישוב עוצמת הטשטוש הדינמי (Dynamic Glassmorphism Blur) כשתפריט הצד או חלונית פתוחים
+            // אפקט טשטוש דינמי (Dynamic Blur) כאשר תפריט הצד או חלונית ה-AI פתוחים
             val isOverlayOpen = drawerState.isOpen || drawerState.isAnimationRunning || showQuickAiWordsDialog
             val dynamicBlurRadius by animateDpAsState(
                 targetValue = if (isOverlayOpen) 14.dp else 0.dp,
@@ -98,7 +98,6 @@ class MainActivity : ComponentActivity() {
                                     RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp)
                                 )
                         ) {
-                            // גלילה אנכית מלאה כדי שכל הכפתורים וההגדרות תמיד יופיעו בכל גודל מסך!
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -124,7 +123,6 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
 
-                                    // כפתור גישה מהירה להגדרות גם בראש התפריט
                                     Box(
                                         modifier = Modifier.clickable {
                                             hapticManager.click()
@@ -140,7 +138,6 @@ class MainActivity : ComponentActivity() {
 
                                 Spacer(modifier = Modifier.height(14.dp))
 
-                                // כפתור בולט להוספת מילים באמצעות AI ישירות מהתפריט
                                 Button(
                                     onClick = {
                                         hapticManager.click()
@@ -166,16 +163,25 @@ class MainActivity : ComponentActivity() {
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                Text("מבטא הקראה באנגלית:", color = StarGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = "מבטא הקראה באנגלית:",
+                                    color = StarGold,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    VoiceAccent.entries.forEach { accent ->
+                                    for (accent in VoiceAccent.entries) {
                                         val isSel = selectedAccent == accent
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .background(if (isSel) TealDark else CardDark)
-                                                .border(1.5.dp, if (isSel) TealNeon else Color.Gray.copy(0.35f), RoundedCornerShape(10.dp))
+                                                .border(
+                                                    1.5.dp,
+                                                    if (isSel) TealNeon else Color.Gray.copy(0.35f),
+                                                    RoundedCornerShape(10.dp)
+                                                )
                                                 .clickable {
                                                     hapticManager.click()
                                                     selectedAccent = accent
@@ -195,7 +201,7 @@ class MainActivity : ComponentActivity() {
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                AppMode.entries.forEach { mode ->
+                                for (mode in AppMode.entries) {
                                     val isSelected = currentMode == mode
                                     Row(
                                         modifier = Modifier
@@ -228,13 +234,34 @@ class MainActivity : ComponentActivity() {
                                             isActive = isSelected
                                         ) {
                                             when (mode) {
-                                                AppMode.FLASHCARDS -> CanvaDiamondIcon(tint = if (isSelected) TealNeon else Color.LightGray, modifier = Modifier.size(18.dp))
-                                                AppMode.SKILL_TREE -> CanvaSkillTreeIcon(tint = if (isSelected) StarGold else Color.LightGray, modifier = Modifier.size(18.dp))
-                                                AppMode.CONVERSATIONS -> CanvaSpeakerBubbleIcon(tint = if (isSelected) TealNeon else Color.LightGray, modifier = Modifier.size(18.dp))
-                                                AppMode.FREE_CHAT -> CanvaMicIcon(tint = if (isSelected) TealNeon else Color.LightGray, modifier = Modifier.size(18.dp))
-                                                AppMode.SPELLING -> CanvaCheckIcon(tint = if (isSelected) TealNeon else Color.LightGray, modifier = Modifier.size(18.dp))
-                                                AppMode.SPEED_ATTACK -> CanvaFlameIcon(tint = if (isSelected) StarGold else Color.LightGray, modifier = Modifier.size(18.dp))
-                                                AppMode.SETTINGS -> CanvaSettingsIcon(tint = if (isSelected) StarGold else Color.LightGray, modifier = Modifier.size(18.dp))
+                                                AppMode.FLASHCARDS -> CanvaDiamondIcon(
+                                                    tint = if (isSelected) TealNeon else Color.LightGray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                AppMode.SKILL_TREE -> CanvaSkillTreeIcon(
+                                                    tint = if (isSelected) StarGold else Color.LightGray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                AppMode.CONVERSATIONS -> CanvaSpeakerBubbleIcon(
+                                                    tint = if (isSelected) TealNeon else Color.LightGray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                AppMode.FREE_CHAT -> CanvaMicIcon(
+                                                    tint = if (isSelected) TealNeon else Color.LightGray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                AppMode.SPELLING -> CanvaCheckIcon(
+                                                    tint = if (isSelected) TealNeon else Color.LightGray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                AppMode.SPEED_ATTACK -> CanvaFlameIcon(
+                                                    tint = if (isSelected) StarGold else Color.LightGray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                AppMode.SETTINGS -> CanvaSettingsIcon(
+                                                    tint = if (isSelected) StarGold else Color.LightGray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(12.dp))
@@ -250,7 +277,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) {
-                    // אפקט הטשטוש הדינמי (Blur) שמופעל אוטומטית על התוכן כשהתפריט או החלונית פתוחים
                     Surface(
                         modifier = Modifier
                             .fillMaxSize()
@@ -264,8 +290,12 @@ class MainActivity : ComponentActivity() {
                             }
                         } else {
                             val wordsForCurrentView = remember(loaded, activeCefrFilter) {
-                                if (activeCefrFilter == CefrLevel.ALL) loaded
-                                else loaded.filter { it.cefr.equals(activeCefrFilter.name, ignoreCase = true) }.ifEmpty { loaded }
+                                if (activeCefrFilter == CefrLevel.ALL) {
+                                    loaded
+                                } else {
+                                    loaded.filter { it.cefr.equals(activeCefrFilter.name, ignoreCase = true) }
+                                        .ifEmpty { loaded }
+                                }
                             }
 
                             when (currentMode) {
@@ -294,7 +324,6 @@ class MainActivity : ComponentActivity() {
                                         currentMode = AppMode.FLASHCARDS
                                     },
                                     onLaunchBossScenario = { bossScenarioId ->
-                                        // מעלה את קרב הבוס שנבחר לראש רשימת השיחות ופותח את מסך השיחות
                                         val sorted = scenariosList.sortedByDescending { it.id == bossScenarioId }
                                         scenariosList = sorted
                                         currentMode = AppMode.CONVERSATIONS
@@ -350,7 +379,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // --- חלונית מהירה להוספת מילים חדשות עם AI (עם רקע מטושטש מאחוריה) ---
                     if (showQuickAiWordsDialog) {
                         AlertDialog(
                             onDismissRequest = { if (!isGeneratingQuickWords) showQuickAiWordsDialog = false },
@@ -359,7 +387,12 @@ class MainActivity : ComponentActivity() {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     CanvaAiDeckIcon(tint = TealNeon, modifier = Modifier.size(22.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("הוספת מילים חדשות עם AI", color = TealNeon, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
+                                    Text(
+                                        text = "הוספת מילים חדשות עם AI",
+                                        color = TealNeon,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 19.sp
+                                    )
                                 }
                             },
                             text = {
@@ -387,7 +420,11 @@ class MainActivity : ComponentActivity() {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             CircularProgressIndicator(color = TealNeon, modifier = Modifier.size(20.dp))
                                             Spacer(modifier = Modifier.width(10.dp))
-                                            Text("ה-AI בונה ומתרגם כרטיסיות חדשות...", color = TealNeon, fontSize = 12.sp)
+                                            Text(
+                                                text = "ה-AI בונה ומתרגם כרטיסיות חדשות...",
+                                                color = TealNeon,
+                                                fontSize = 12.sp
+                                            )
                                         }
                                     }
                                 }
@@ -438,3 +475,4 @@ class MainActivity : ComponentActivity() {
         speechManager.destroy()
     }
 }
+
