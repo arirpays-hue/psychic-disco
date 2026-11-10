@@ -1,5 +1,6 @@
 package com.example.englishtutor
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -33,7 +34,6 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-// מעטפת תגית מעוצבת בסגנון קנבה (ריבוע מעוגל עם ברק פנימי ומסגרת ניאון)
 @Composable
 fun CanvaIconBadge(
     accentColor: Color,
@@ -67,7 +67,259 @@ fun CanvaIconBadge(
     }
 }
 
-// 1. סמל תפריט צד מעוצב (3 פסי ניאון מדורגים)
+// 1. סמל רמקול דו-מצבי מעוצב בקנבה (פעיל עם גלי קול ניאון / מושתק עם X וקו אלכסוני)
+@Composable
+fun CanvaSoundToggleIcon(
+    isMuted: Boolean,
+    isSpeakingNow: Boolean = false,
+    modifier: Modifier = Modifier.size(22.dp)
+) {
+    val transition = rememberInfiniteTransition(label = "soundWaveAnim")
+    val wavePulse by transition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = if (isSpeakingNow && !isMuted) 1.25f else 1.0f,
+        animationSpec = infiniteRepeatable(tween(420, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "wavePulse"
+    )
+
+    val activeColor = if (isMuted) ErrorCrimson else TealNeon
+    val secondaryGlow = if (isMuted) StarGold else CheckNeon
+
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+
+        // הילה פנימית מאחורי הרמקול
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(activeColor.copy(alpha = 0.25f), Color.Transparent)
+            ),
+            radius = w * 0.48f
+        )
+
+        // גוף הרמקול המעוצב
+        val speakerPath = Path().apply {
+            moveTo(w * 0.10f, h * 0.37f)
+            lineTo(w * 0.30f, h * 0.37f)
+            lineTo(w * 0.54f, h * 0.16f)
+            lineTo(w * 0.54f, h * 0.84f)
+            lineTo(w * 0.30f, h * 0.63f)
+            lineTo(w * 0.10f, h * 0.63f)
+            close()
+        }
+        drawPath(speakerPath, color = activeColor.copy(alpha = 0.3f))
+        drawPath(
+            speakerPath,
+            color = activeColor,
+            style = Stroke(width = w * 0.085f, join = StrokeJoin.Round)
+        )
+
+        if (isMuted) {
+            // סמל מושתק: X ניאון חד לצד הרמקול
+            drawLine(
+                color = ErrorCrimson,
+                start = Offset(w * 0.66f, h * 0.34f),
+                end = Offset(w * 0.92f, h * 0.66f),
+                strokeWidth = w * 0.10f,
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = ErrorCrimson,
+                start = Offset(w * 0.92f, h * 0.34f),
+                end = Offset(w * 0.66f, h * 0.66f),
+                strokeWidth = w * 0.10f,
+                cap = StrokeCap.Round
+            )
+        } else {
+            // סמל לא מושתק (פעיל): קשתות גלי קול זוהרות
+            drawArc(
+                color = activeColor,
+                startAngle = -42f,
+                sweepAngle = 84f,
+                useCenter = false,
+                topLeft = Offset(w * 0.44f, h * 0.28f),
+                size = Size(w * 0.28f * wavePulse, h * 0.44f),
+                style = Stroke(width = w * 0.085f, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = secondaryGlow,
+                startAngle = -48f,
+                sweepAngle = 96f,
+                useCenter = false,
+                topLeft = Offset(w * 0.52f, h * 0.14f),
+                size = Size(w * 0.40f * wavePulse, h * 0.72f),
+                style = Stroke(width = w * 0.08f, cap = StrokeCap.Round)
+            )
+        }
+    }
+}
+
+// 2. כפתור הקלדה קולית מעוצב בקנבה עם אנימציית סונאר ואקוולייזר חי כשהוא מקליט!
+@Composable
+fun CanvaVoiceOrbButton(
+    isRecording: Boolean,
+    voiceLevel: Float,
+    modifier: Modifier = Modifier.size(52.dp)
+) {
+    val transition = rememberInfiniteTransition(label = "micOrbFX")
+    val sonarRing by transition.animateFloat(
+        initialValue = 0.65f,
+        targetValue = 1.35f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Restart),
+        label = "sonarRing"
+    )
+    val orbitAngle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(2200, easing = LinearEasing)),
+        label = "orbitAngle"
+    )
+    val waveBarPhase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(650, easing = LinearEasing)),
+        label = "waveBarPhase"
+    )
+
+    val mainColor = if (isRecording) ErrorCrimson else TealNeon
+    val accentGlow = if (isRecording) StarGold else PurpleNeon
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(52.dp)) {
+            val w = size.width
+            val h = size.height
+            val cx = w / 2f
+            val cy = h / 2f
+
+            if (isRecording) {
+                // גל סונאר מתפשט בזמן הקלטה
+                val sonarAlpha = (1.35f - sonarRing).coerceIn(0f, 0.7f)
+                drawCircle(
+                    color = ErrorCrimson.copy(alpha = sonarAlpha * 0.5f),
+                    radius = (w * 0.38f) * sonarRing,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = w * 0.05f)
+                )
+
+                // הילה שמתרחבת לפי עוצמת הדיבור האמיתית במיקרופון
+                val dynamicRadius = w * (0.36f + voiceLevel * 0.14f)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(ErrorCrimson.copy(alpha = 0.45f), Color.Transparent)
+                    ),
+                    radius = dynamicRadius,
+                    center = Offset(cx, cy)
+                )
+
+                // טבעת ספקטרום מסתובבת סביב המיקרופון הפעיל
+                rotate(degrees = orbitAngle, pivot = Offset(cx, cy)) {
+                    drawArc(
+                        brush = Brush.sweepGradient(
+                            listOf(ErrorCrimson, StarGold, PurpleNeon, ErrorCrimson)
+                        ),
+                        startAngle = 0f,
+                        sweepAngle = 280f,
+                        useCenter = false,
+                        topLeft = Offset(w * 0.06f, h * 0.06f),
+                        size = Size(w * 0.88f, h * 0.88f),
+                        style = Stroke(width = w * 0.06f, cap = StrokeCap.Round)
+                    )
+                }
+            } else {
+                // מסגרת קנבה יוקרתית במצב המתנה
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        listOf(TealNeon.copy(alpha = 0.25f), Color(0xFF101829))
+                    ),
+                    topLeft = Offset(w * 0.08f, h * 0.08f),
+                    size = Size(w * 0.84f, h * 0.84f),
+                    cornerRadius = CornerRadius(w * 0.28f, h * 0.28f)
+                )
+                drawRoundRect(
+                    color = TealNeon.copy(alpha = 0.85f),
+                    topLeft = Offset(w * 0.08f, h * 0.08f),
+                    size = Size(w * 0.84f, h * 0.84f),
+                    cornerRadius = CornerRadius(w * 0.28f, h * 0.28f),
+                    style = Stroke(width = w * 0.045f)
+                )
+            }
+
+            // ציור קפסולת המיקרופון במרכז
+            drawRoundRect(
+                color = mainColor,
+                topLeft = Offset(w * 0.38f, h * 0.24f),
+                size = Size(w * 0.24f, h * 0.32f),
+                cornerRadius = CornerRadius(w * 0.12f, w * 0.12f),
+                style = if (isRecording) androidx.compose.ui.graphics.drawscope.Fill else Stroke(width = w * 0.055f)
+            )
+
+            // קשת קליטה תחתונה
+            drawArc(
+                color = mainColor,
+                startAngle = 0f,
+                sweepAngle = 180f,
+                useCenter = false,
+                topLeft = Offset(w * 0.29f, h * 0.34f),
+                size = Size(w * 0.42f, h * 0.32f),
+                style = Stroke(width = w * 0.055f, cap = StrokeCap.Round)
+            )
+
+            // עמוד ובסיס המיקרופון
+            drawLine(mainColor, Offset(cx, h * 0.66f), Offset(cx, h * 0.77f), w * 0.055f, StrokeCap.Round)
+            drawLine(mainColor, Offset(w * 0.37f, h * 0.77f), Offset(w * 0.63f, h * 0.77f), w * 0.055f, StrokeCap.Round)
+
+            // גלי קול צדדיים קופצים בזמן דיבור
+            if (isRecording) {
+                val leftWaveH = h * (0.14f + abs(sin(waveBarPhase)) * 0.18f * (0.5f + voiceLevel))
+                val rightWaveH = h * (0.14f + abs(cos(waveBarPhase)) * 0.18f * (0.5f + voiceLevel))
+                drawLine(
+                    color = accentGlow,
+                    start = Offset(w * 0.20f, cy - leftWaveH / 2f),
+                    end = Offset(w * 0.20f, cy + leftWaveH / 2f),
+                    strokeWidth = w * 0.055f,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = accentGlow,
+                    start = Offset(w * 0.80f, cy - rightWaveH / 2f),
+                    end = Offset(w * 0.80f, cy + rightWaveH / 2f),
+                    strokeWidth = w * 0.055f,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+    }
+}
+
+private fun abs(v: Float): Float = if (v < 0f) -v else v
+
+// 3. סמל מבחן אמריקאי / חידון חי בצ'אט
+@Composable
+fun CanvaQuizIcon(tint: Color = StarGold, modifier: Modifier = Modifier.size(18.dp)) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(w * 0.14f, h * 0.12f),
+            size = Size(w * 0.72f, h * 0.76f),
+            cornerRadius = CornerRadius(w * 0.14f, w * 0.14f),
+            style = Stroke(width = w * 0.09f)
+        )
+        drawCircle(tint, radius = w * 0.06f, center = Offset(w * 0.30f, h * 0.34f))
+        drawLine(tint, Offset(w * 0.44f, h * 0.34f), Offset(w * 0.72f, h * 0.34f), w * 0.08f, StrokeCap.Round)
+
+        drawCircle(tint, radius = w * 0.06f, center = Offset(w * 0.30f, h * 0.52f))
+        drawLine(tint, Offset(w * 0.44f, h * 0.52f), Offset(w * 0.72f, h * 0.52f), w * 0.08f, StrokeCap.Round)
+
+        drawCircle(tint, radius = w * 0.06f, center = Offset(w * 0.30f, h * 0.70f))
+        drawLine(tint, Offset(w * 0.44f, h * 0.70f), Offset(w * 0.64f, h * 0.70f), w * 0.08f, StrokeCap.Round)
+    }
+}
+
 @Composable
 fun CanvaMenuIcon(tint: Color = TealNeon, modifier: Modifier = Modifier.size(22.dp)) {
     Canvas(modifier = modifier) {
@@ -80,7 +332,6 @@ fun CanvaMenuIcon(tint: Color = TealNeon, modifier: Modifier = Modifier.size(22.
     }
 }
 
-// 2. סמל יהלום קטגוריה
 @Composable
 fun CanvaDiamondIcon(tint: Color = TealNeon, modifier: Modifier = Modifier.size(20.dp)) {
     Canvas(modifier = modifier) {
@@ -100,7 +351,6 @@ fun CanvaDiamondIcon(tint: Color = TealNeon, modifier: Modifier = Modifier.size(
     }
 }
 
-// 3. סמל אישור / נלמד (וי ניאון זוהר כפול)
 @Composable
 fun CanvaCheckIcon(tint: Color = CheckNeon, modifier: Modifier = Modifier.size(24.dp)) {
     Canvas(modifier = modifier) {
@@ -116,7 +366,6 @@ fun CanvaCheckIcon(tint: Color = CheckNeon, modifier: Modifier = Modifier.size(2
     }
 }
 
-// 4. סמל כוכב / מילה קשה
 @Composable
 fun CanvaStarIcon(tint: Color = StarGold, isFilled: Boolean = true, modifier: Modifier = Modifier.size(24.dp)) {
     Canvas(modifier = modifier) {
@@ -142,7 +391,6 @@ fun CanvaStarIcon(tint: Color = StarGold, isFilled: Boolean = true, modifier: Mo
     }
 }
 
-// 5. סמל מיקרופון אולפן מעוצב
 @Composable
 fun CanvaMicIcon(tint: Color = TealNeon, isRecording: Boolean = false, modifier: Modifier = Modifier.size(24.dp)) {
     Canvas(modifier = modifier) {
@@ -172,7 +420,6 @@ fun CanvaMicIcon(tint: Color = TealNeon, isRecording: Boolean = false, modifier:
     }
 }
 
-// 6. סמל לב אנרגיה
 @Composable
 fun CanvaHeartIcon(isActive: Boolean, modifier: Modifier = Modifier.size(20.dp)) {
     val activeColor = Color(0xFFFF3366)
@@ -197,7 +444,6 @@ fun CanvaHeartIcon(isActive: Boolean, modifier: Modifier = Modifier.size(20.dp))
     }
 }
 
-// 7. סמל להבת רצף
 @Composable
 fun CanvaFlameIcon(tint: Color = StarGold, modifier: Modifier = Modifier.size(18.dp)) {
     Canvas(modifier = modifier) {
@@ -215,7 +461,6 @@ fun CanvaFlameIcon(tint: Color = StarGold, modifier: Modifier = Modifier.size(18
     }
 }
 
-// 8. סמל ברק ניאון
 @Composable
 fun CanvaBoltIcon(tint: Color = StarGold, modifier: Modifier = Modifier.size(18.dp)) {
     Canvas(modifier = modifier) {
@@ -235,7 +480,6 @@ fun CanvaBoltIcon(tint: Color = StarGold, modifier: Modifier = Modifier.size(18.
     }
 }
 
-// 9. סמל ניצוץ AI
 @Composable
 fun CanvaSparkleIcon(tint: Color = PurpleNeon, modifier: Modifier = Modifier.size(18.dp)) {
     Canvas(modifier = modifier) {
@@ -254,7 +498,6 @@ fun CanvaSparkleIcon(tint: Color = PurpleNeon, modifier: Modifier = Modifier.siz
     }
 }
 
-// 10. סמל חץ חזרה מעוצב
 @Composable
 fun CanvaBackArrowIcon(tint: Color = PurpleNeon, modifier: Modifier = Modifier.size(22.dp)) {
     Canvas(modifier = modifier) {
@@ -267,7 +510,6 @@ fun CanvaBackArrowIcon(tint: Color = PurpleNeon, modifier: Modifier = Modifier.s
     }
 }
 
-// 11. סמל רענון / סבב חדש
 @Composable
 fun CanvaRefreshIcon(tint: Color = TealNeon, modifier: Modifier = Modifier.size(20.dp)) {
     Canvas(modifier = modifier) {
@@ -292,7 +534,6 @@ fun CanvaRefreshIcon(tint: Color = TealNeon, modifier: Modifier = Modifier.size(
     }
 }
 
-// 12. סמל סגירה / שגיאה (X ניאון)
 @Composable
 fun CanvaCloseIcon(tint: Color = ErrorCrimson, modifier: Modifier = Modifier.size(20.dp)) {
     Canvas(modifier = modifier) {
@@ -304,7 +545,6 @@ fun CanvaCloseIcon(tint: Color = ErrorCrimson, modifier: Modifier = Modifier.siz
     }
 }
 
-// 13. סמל שליחת הודעה
 @Composable
 fun CanvaSendIcon(tint: Color = DarkBg, modifier: Modifier = Modifier.size(20.dp)) {
     Canvas(modifier = modifier) {
@@ -321,7 +561,6 @@ fun CanvaSendIcon(tint: Color = DarkBg, modifier: Modifier = Modifier.size(20.dp
     }
 }
 
-// 14. סמל הפעלה (Play)
 @Composable
 fun CanvaPlayIcon(tint: Color = TealNeon, modifier: Modifier = Modifier.size(18.dp)) {
     Canvas(modifier = modifier) {
@@ -338,7 +577,6 @@ fun CanvaPlayIcon(tint: Color = TealNeon, modifier: Modifier = Modifier.size(18.
     }
 }
 
-// 15. סמל הגדרות מעוצב
 @Composable
 fun CanvaSettingsIcon(tint: Color = StarGold, modifier: Modifier = Modifier.size(22.dp)) {
     Canvas(modifier = modifier) {
@@ -360,19 +598,39 @@ fun CanvaSettingsIcon(tint: Color = StarGold, modifier: Modifier = Modifier.size
     }
 }
 
-// 16. סמל תרגום דו-לשוני
+// 4. סמל תרגום גוגל מעוצב בקנבה (כדור הארץ + חילופי אותיות A/א)
 @Composable
-fun CanvaTranslateIcon(tint: Color = StarGold, modifier: Modifier = Modifier.size(16.dp)) {
+fun CanvaTranslateIcon(tint: Color = StarGold, modifier: Modifier = Modifier.size(18.dp)) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        drawCircle(tint, radius = w * 0.40f, style = Stroke(width = w * 0.09f))
-        drawLine(tint, Offset(w * 0.12f, h * 0.5f), Offset(w * 0.88f, h * 0.5f), w * 0.08f)
-        drawLine(tint, Offset(w * 0.5f, h * 0.12f), Offset(w * 0.5f, h * 0.88f), w * 0.08f)
+        drawRoundRect(
+            color = tint.copy(alpha = 0.22f),
+            topLeft = Offset(w * 0.08f, h * 0.08f),
+            size = Size(w * 0.54f, h * 0.54f),
+            cornerRadius = CornerRadius(w * 0.14f, w * 0.14f)
+        )
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(w * 0.08f, h * 0.08f),
+            size = Size(w * 0.54f, h * 0.54f),
+            cornerRadius = CornerRadius(w * 0.14f, w * 0.14f),
+            style = Stroke(width = w * 0.08f)
+        )
+        drawRoundRect(
+            color = TealNeon,
+            topLeft = Offset(w * 0.38f, h * 0.38f),
+            size = Size(w * 0.54f, h * 0.54f),
+            cornerRadius = CornerRadius(w * 0.14f, w * 0.14f),
+            style = Stroke(width = w * 0.08f)
+        )
+        drawLine(tint, Offset(w * 0.24f, h * 0.46f), Offset(w * 0.35f, h * 0.22f), w * 0.08f, StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.35f, h * 0.22f), Offset(w * 0.46f, h * 0.46f), w * 0.08f, StrokeCap.Round)
+        drawLine(TealNeon, Offset(w * 0.54f, h * 0.56f), Offset(w * 0.76f, h * 0.76f), w * 0.08f, StrokeCap.Round)
+        drawLine(TealNeon, Offset(w * 0.76f, h * 0.56f), Offset(w * 0.54f, h * 0.76f), w * 0.08f, StrokeCap.Round)
     }
 }
 
-// 17. סמל דובר / בועת שיחה
 @Composable
 fun CanvaSpeakerBubbleIcon(tint: Color = PurpleNeon, modifier: Modifier = Modifier.size(18.dp)) {
     Canvas(modifier = modifier) {
@@ -390,7 +648,6 @@ fun CanvaSpeakerBubbleIcon(tint: Color = PurpleNeon, modifier: Modifier = Modifi
     }
 }
 
-// 18. סמל פלוס ליצירת תשובות
 @Composable
 fun CanvaPlusIcon(tint: Color = PurpleNeon, modifier: Modifier = Modifier.size(14.dp)) {
     Canvas(modifier = modifier) {
@@ -402,7 +659,6 @@ fun CanvaPlusIcon(tint: Color = PurpleNeon, modifier: Modifier = Modifier.size(1
     }
 }
 
-// 19. סמל שעון עצר מעוצב
 @Composable
 fun CanvaTimerIcon(tint: Color = TealNeon, modifier: Modifier = Modifier.size(18.dp)) {
     Canvas(modifier = modifier) {
@@ -414,7 +670,6 @@ fun CanvaTimerIcon(tint: Color = TealNeon, modifier: Modifier = Modifier.size(18
     }
 }
 
-// 20. סמל ליבת בינה מלאכותית מונפש ("ה-AI חושב") בסגנון קנבה
 @Composable
 fun CanvaAiThinkingIcon(
     primaryColor: Color = TealNeon,
@@ -447,7 +702,6 @@ fun CanvaAiThinkingIcon(
         val cx = w / 2f
         val cy = h / 2f
 
-        // הילה פנימית פועמת
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(primaryColor.copy(alpha = 0.38f * corePulse.coerceAtMost(1f)), Color.Transparent)
@@ -456,7 +710,6 @@ fun CanvaAiThinkingIcon(
             center = Offset(cx, cy)
         )
 
-        // טבעת חיצונית מקוטעת מסתובבת
         rotate(degrees = outerAngle, pivot = Offset(cx, cy)) {
             drawArc(
                 color = primaryColor,
@@ -478,7 +731,6 @@ fun CanvaAiThinkingIcon(
             )
         }
 
-        // משושה פנימי מסתובב בכיוון הפוך
         rotate(degrees = innerAngle, pivot = Offset(cx, cy)) {
             val hexPath = Path()
             val r = w * 0.26f
@@ -496,7 +748,6 @@ fun CanvaAiThinkingIcon(
             )
         }
 
-        // ניצוץ ליבה מרכזי פועם
         val starR = w * 0.14f * corePulse
         val starPath = Path().apply {
             moveTo(cx, cy - starR)
