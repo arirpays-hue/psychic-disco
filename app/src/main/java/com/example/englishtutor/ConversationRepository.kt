@@ -40,9 +40,20 @@ data class ConversationScenario(
     val isAiGenerated: Boolean = false
 )
 
+// מודל מבחן אמריקאי / אינטראקציה חיה שנוצרת בתוך הצ'אט החופשי
+data class InteractiveChatQuiz(
+    val typeTitleHe: String,
+    val questionEn: String,
+    val questionHe: String,
+    val optionsEn: List<String>,
+    val correctIndex: Int,
+    val explanationHe: String
+)
+
 data class FreeChatResponse(
     val replyEn: String,
-    val correctionHe: String?
+    val correctionHe: String?,
+    val interactiveQuiz: InteractiveChatQuiz? = null
 )
 
 class ConversationRepository(private val context: Context) {
@@ -73,19 +84,24 @@ class ConversationRepository(private val context: Context) {
 
     private fun sanitizeEnglishOnly(text: String, fallback: String): String {
         val withoutHebrew = text.replace(Regex("[\\u0590-\\u05FF]+"), "").replace("()", "").replace("  ", " ").trim()
-        return if (withoutHebrew.length >= 4) withoutHebrew else fallback
+        return if (withoutHebrew.length >= 2) withoutHebrew else fallback
+    }
+
+    // שליחת טקסט ישירות לשרת התרגום החינמי של גוגל (עבור לחיצה ארוכה על הודעה בצ'אט)
+    suspend fun translateTextOnline(englishText: String): String = withContext(Dispatchers.IO) {
+        translateEnToHeFallback(englishText)
     }
 
     private fun translateEnToHeFallback(englishText: String): String {
         if (englishText.isBlank()) return ""
         return runCatching {
-            val encoded = URLEncoder.encode(englishText, "UTF-8")
+            val encoded = URLEncoder.encode(englishText.trim(), "UTF-8")
             val url = URL("https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=iw&dt=t&q=$encoded")
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 setRequestProperty("User-Agent", "Mozilla/5.0")
-                connectTimeout = 5000
-                readTimeout = 5000
+                connectTimeout = 6000
+                readTimeout = 6000
             }
             val response = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
             val outerArray = JSONArray(response)
@@ -98,7 +114,7 @@ class ConversationRepository(private val context: Context) {
                 }
             }
             sb.toString().trim()
-        }.getOrDefault("לחץ להשמעת המשפט באנגלית ונסה להבין מההקשר")
+        }.getOrDefault("לא ניתן היה להתחבר לשרת התרגום כרגע. בדוק חיבור אינטרנט.")
     }
 
     private fun parseScenariosArray(jsonStr: String, isAi: Boolean): List<ConversationScenario> {
@@ -117,7 +133,7 @@ class ConversationRepository(private val context: Context) {
 
     private fun parseSingleScenario(obj: JSONObject, isAiFallback: Boolean): ConversationScenario? {
         val id = obj.optString("id").trim()
-        val categoryHe = obj.optString("categoryHe", if (isAiFallback) "שיחות AI ✨" else "כללי").trim()
+        val categoryHe = obj.optString("categoryHe", if (isAiFallback) "שיחות AI" else "כללי").trim()
         val titleHe = obj.optString("titleHe").trim()
         val titleEn = obj.optString("titleEn", "English Roleplay Conversation").trim()
         val difficultyHe = obj.optString("difficultyHe", "בינוני").trim()
@@ -133,7 +149,7 @@ class ConversationRepository(private val context: Context) {
             val rawSpeakerEn = nObj.optString("speakerLineEn").trim()
             val speakerLineEn = sanitizeEnglishOnly(rawSpeakerEn, "Hello! Could you please explain the details so I can assist you?")
 
-            var speakerLineHe = nObj.optString("speakerLineHe").ifBlank {
+            val speakerLineHe = nObj.optString("speakerLineHe").ifBlank {
                 nObj.optString("hebrew").ifBlank { nObj.optString("translation") }
             }.trim()
 
@@ -214,8 +230,8 @@ class ConversationRepository(private val context: Context) {
                     val isOpt = oObj.optBoolean("isOptimal", false)
                     oObj.put(
                         "feedbackHe",
-                        if (isOpt) "✓ תשובה מצוינת! דקדוק תקין וניסוח מנומס."
-                        else "✗ תשובה שגויה דקדוקית או שאינה מתאימה להקשר השיחה. נסה שוב!"
+                        if (isOpt) "תשובה מצוינת! דקדוק תקין וניסוח מנומס."
+                        else "תשובה שגויה דקדוקית או שאינה מתאימה להקשר השיחה. נסה שוב!"
                     )
                 }
             }
@@ -253,9 +269,9 @@ class ConversationRepository(private val context: Context) {
             val conn = (geminiUrl.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                setRequestProperty("User-Agent", "EnglishTutorAndroid/4.0")
+                setRequestProperty("User-Agent", "EnglishTutorAndroid/5.0")
                 connectTimeout = 20000
-                readTimeout = 40000
+                readTimeout = 35000
                 doOutput = true
             }
             val payload = JSONObject().apply {
@@ -337,403 +353,215 @@ class ConversationRepository(private val context: Context) {
         throw IllegalArgumentException("Invalid JSON Array format")
     }
 
+    // --- מענה בצ'אט החופשי כולל זיהוי אוטומטי של בקשות למבחן אמריקאי / השלמת משפטים / תרגול ---
+    suspend fun generateFreeChatReply(userMessage: String, history: List<ChatMessage>): FreeChatResponse = withContext(Dispatchers.IO) {
+        val lower = userMessage.lowercase()
+        val wantsQuiz = lower.contains("quiz") || lower.contains("test") ||
+            userMessage.contains("מבחן") || userMessage.contains("חידון") ||
+            userMessage.contains("אמריקאי") || userMessage.contains("שאלה")
+        val wantsFillBlank = lower.contains("fill") || lower.contains("blank") ||
+            userMessage.contains("השלמ") || userMessage.contains("משפט חסר")
+        val wantsVocabChallenge = lower.contains("challenge") || lower.contains("vocab") ||
+            userMessage.contains("אתגר") || userMessage.contains("אוצר מילים")
+
+        if (wantsQuiz || wantsFillBlank || wantsVocabChallenge) {
+            val modeType = when {
+                wantsFillBlank -> "FILL_BLANK"
+                wantsVocabChallenge -> "VOCAB_CHALLENGE"
+                else -> "MULTIPLE_CHOICE"
+            }
+            return@withContext generateInteractiveChatChallenge(modeType, userMessage)
+        }
+
+        runCatching {
+            val systemPrompt = """
+                You are a friendly, intelligent English tutor for Hebrew speakers.
+                Respond in natural, engaging English (1-2 sentences).
+                Analyze the user's message for grammar, phrasing, or spelling mistakes:
+                - If there is a mistake, explain it constructively in Hebrew in "correctionHe".
+                - If the user's English is correct or if the user wrote in Hebrew, set "correctionHe" to null.
+                Format output strictly as JSON: {"replyEn": "...", "correctionHe": "..."}
+            """.trimIndent()
+
+            val jsonStr = requestAiJson(systemPrompt, userMessage)
+            val obj = extractCleanJsonObject(jsonStr)
+            val replyEn = sanitizeEnglishOnly(
+                obj.optString("replyEn"),
+                "That sounds very interesting! Could you tell me more about your perspective on that?"
+            )
+            val correctionHe = if (obj.has("correctionHe") && !obj.isNull("correctionHe") && obj.getString("correctionHe").isNotBlank()) {
+                obj.getString("correctionHe")
+            } else null
+
+            FreeChatResponse(replyEn, correctionHe, null)
+        }.getOrElse {
+            FreeChatResponse(
+                replyEn = "I'd love to hear more about that! How would you describe it in your own words?",
+                correctionHe = null,
+                interactiveQuiz = null
+            )
+        }
+    }
+
+    // --- מחולל מבחנים אמריקאיים ואינטראקציות חיות בזמן אמת בתוך הצ'אט ---
+    suspend fun generateInteractiveChatChallenge(
+        interactionType: String,
+        customTopic: String = ""
+    ): FreeChatResponse = withContext(Dispatchers.IO) {
+        val typeTitleHe = when (interactionType) {
+            "FILL_BLANK" -> "אתגר השלמת משפט (Fill in the Blank)"
+            "VOCAB_CHALLENGE" -> "אתגר אוצר מילים וניבים (Idiom & Vocab)"
+            "GRAMMAR_FIX" -> "אתגר זיהוי המשפט התקין דקדוקית"
+            else -> "מבחן אמריקאי חי (Multiple Choice Quiz)"
+        }
+
+        val onlineQuiz = runCatching {
+            val systemPrompt = """
+                You are an interactive English exam generator for Hebrew speakers.
+                Return ONLY a valid JSON object creating a 4-option interactive English question.
+                Interaction Type: $interactionType.
+                Rules:
+                - "replyEn": Short encouraging intro in pure English.
+                - "questionEn": The question or fill-in-the-blank sentence in pure English.
+                - "questionHe": Full Hebrew translation of the question.
+                - "optionsEn": JSON array of 4 pure English options.
+                - "correctIndex": Integer 0, 1, 2, or 3 indicating the correct option.
+                - "explanationHe": Detailed Hebrew explanation of why the correct option is right and others are wrong.
+            """.trimIndent()
+
+            val userPrompt = """
+                Topic/Request: "${customTopic.ifBlank { "General practical English, grammar & travel/work idioms" }}"
+                Required JSON format:
+                {
+                  "replyEn": "Here is an interactive challenge for you! Tap the correct answer below:",
+                  "questionEn": "...",
+                  "questionHe": "...",
+                  "optionsEn": ["Option A", "Option B", "Option C", "Option D"],
+                  "correctIndex": 0,
+                  "explanationHe": "..."
+                }
+            """.trimIndent()
+
+            val raw = requestAiJson(systemPrompt, userPrompt)
+            val obj = extractCleanJsonObject(raw)
+            val optsArr = obj.getJSONArray("optionsEn")
+            val optsList = mutableListOf<String>()
+            for (i in 0 until optsArr.length()) {
+                optsList.add(sanitizeEnglishOnly(optsArr.optString(i), "Option ${i + 1}"))
+            }
+            while (optsList.size < 4) {
+                optsList.add("None of the above")
+            }
+
+            val qEn = sanitizeEnglishOnly(obj.optString("questionEn"), "Which sentence is grammatically correct?")
+            val qHe = obj.optString("questionHe").ifBlank { translateEnToHeFallback(qEn) }
+            val corrIdx = obj.optInt("correctIndex", 0).coerceIn(0, optsList.size - 1)
+
+            FreeChatResponse(
+                replyEn = sanitizeEnglishOnly(obj.optString("replyEn"), "Here is your interactive challenge! Select the right answer:"),
+                correctionHe = null,
+                interactiveQuiz = InteractiveChatQuiz(
+                    typeTitleHe = typeTitleHe,
+                    questionEn = qEn,
+                    questionHe = qHe,
+                    optionsEn = optsList.take(4),
+                    correctIndex = corrIdx,
+                    explanationHe = obj.optString("explanationHe", "זוהי הצורה הדקדוקית הנכונה במשפט זה.")
+                )
+            )
+        }
+
+        onlineQuiz.getOrElse {
+            // מאגר שאלות אינטראקטיביות מגוון ומוכן למקרה של חוסר קליטה
+            val fallbackQuizzes = listOf(
+                InteractiveChatQuiz(
+                    typeTitleHe = typeTitleHe,
+                    questionEn = "By the time we arrived at the airport, the flight _______ already departed.",
+                    questionHe = "עד שהגענו לשדה התעופה, הטיסה כבר המריאה.",
+                    optionsEn = listOf("had", "has", "was", "did"),
+                    correctIndex = 0,
+                    explanationHe = "משתמשים ב-Past Perfect (had departed) עבור פעולה שהסתיימה בעבר לפני פעולה אחרת בעבר (arrived)."
+                ),
+                InteractiveChatQuiz(
+                    typeTitleHe = typeTitleHe,
+                    questionEn = "I am really looking forward to _______ from you soon.",
+                    questionHe = "אני ממש מצפה לשמוע ממך בקרוב.",
+                    optionsEn = listOf("hearing", "hear", "heard", "be hear"),
+                    correctIndex = 0,
+                    explanationHe = "אחרי הביטוי 'look forward to' ה-to היא מילת יחס, ולכן הפועל אחריה חייב להסתיים ב-ing (hearing)!"
+                ),
+                InteractiveChatQuiz(
+                    typeTitleHe = typeTitleHe,
+                    questionEn = "Which sentence is 100% grammatically correct in English?",
+                    questionHe = "איזה מהמשפטים הבאים תקין ב-100% דקדוקית באנגלית?",
+                    optionsEn = listOf(
+                        "I completely agree with your point.",
+                        "I am completely agree with your point.",
+                        "I am agreeing to your point yesterday.",
+                        "Me agree with you very much."
+                    ),
+                    correctIndex = 0,
+                    explanationHe = "הפועל agree הוא פועל רגיל ולא שם תואר, ולכן אומרים 'I agree' ולעולם לא 'I am agree'."
+                ),
+                InteractiveChatQuiz(
+                    typeTitleHe = typeTitleHe,
+                    questionEn = "If I _______ more free time this week, I would learn another programming language.",
+                    questionHe = "אילו היה לי יותר זמן פנוי השבוע, הייתי לומד שפת תכנות נוספת.",
+                    optionsEn = listOf("had", "will have", "have", "would have"),
+                    correctIndex = 0,
+                    explanationHe = "במשפט תנאי היפותטי בהווה (Second Conditional), בחלק של ה-If משתמשים בעבר פשוט (had) ובחלק השני ב-would."
+                )
+            )
+            val chosen = fallbackQuizzes.random()
+            FreeChatResponse(
+                replyEn = "Here is a live interactive challenge for you! Tap the correct option below:",
+                correctionHe = null,
+                interactiveQuiz = chosen
+            )
+        }
+    }
+
     private fun buildSmartDynamicScenarioJson(topicHe: String, difficultyHe: String): JSONObject {
         val t = topicHe.trim()
-        val isSecurityAirport = t.contains("ביטחונית") || t.contains("שדה תעופה") || t.contains("תשאול") || t.contains("טיסה")
-        val isLondonApartment = t.contains("דירה") || t.contains("לונדון") || t.contains("שכיר")
-        val isDentistOrDoctor = t.contains("שיניים") || t.contains("רופא") || t.contains("מרפאה")
-        val isBank = t.contains("בנק") || t.contains("אשראי") || t.contains("חשבון")
-
-        if (isSecurityAirport) {
-            return JSONObject("""
-                {
-                  "id": "ai_${System.currentTimeMillis()}",
-                  "categoryHe": "שיחות AI ✨",
-                  "titleHe": "$t",
-                  "titleEn": "Airport Security Screening & Questioning",
-                  "difficultyHe": "$difficultyHe",
-                  "nodes": [
-                    {
-                      "id": "start",
-                      "speakerName": "Security Officer",
-                      "speakerLineEn": "Good morning. Please step aside for a routine security check. Did you pack your carry-on bag yourself this morning?",
-                      "speakerLineHe": "בוקר טוב. אנא זוז הצידה לבדיקה ביטחונית שגרתית. האם ארזת את תיק היד שלך בעצמך הבוקר?",
-                      "options": [
-                        {
-                          "textEn": "Yes, officer. I packed my bag myself at the hotel, and it has been with me the entire time.",
-                          "textHe": "כן, אדוני השוטר. ארזתי את התיק בעצמי במלון, והוא היה איתי כל הזמן.",
-                          "nextNodeId": "step2",
-                          "feedbackHe": "✓ תשובה מצוינת! ברורה, רגועה ומדויקת לתשאול ביטחוני בשדה התעופה.",
-                          "isOptimal": true
-                        },
-                        {
-                          "textEn": "A stranger in the street gave me this closed box to take on the plane.",
-                          "textHe": "אדם זר ברחוב נתן לי את הקופסה הסגורה הזו כדי להעלות למטוס.",
-                          "nextNodeId": "start",
-                          "feedbackHe": "✗ תשובה מסוכנת שתוביל לעיכוב ביטחוני מיידי! לעולם לא לוקחים חפצים מזרים לטיסה.",
-                          "isOptimal": false
-                        },
-                        {
-                          "textEn": "I am not know who putted things inside my bag.",
-                          "textHe": "אני לא יודע מי שם דברים בתוך התיק שלי.",
-                          "nextNodeId": "start",
-                          "feedbackHe": "✗ שתי שגיאות דקדוק ('I do not know', והפועל 'put' נשאר 'put' בעבר ולא 'putted').",
-                          "isOptimal": false
-                        }
-                      ]
-                    },
-                    {
-                      "id": "step2",
-                      "speakerName": "Security Officer",
-                      "speakerLineEn": "Do you have any laptops, power banks, or liquids over 100 milliliters inside your backpack?",
-                      "speakerLineHe": "האם יש לך מחשבים ניידים, סוללות גיבוי (פאוור-בנק) או נוזלים מעל 100 מיליליטר בתוך תיק הגב?",
-                      "options": [
-                        {
-                          "textEn": "I have my laptop and a portable charger. Shall I take them out and place them in a separate tray?",
-                          "textHe": "יש לי את הלפטופ ומטען נייד. האם להוציא אותם ולהניח אותם במגש נפרד?",
-                          "nextNodeId": "step3",
-                          "feedbackHe": "✓ מעולה! 'Portable charger' ו-'separate tray' (מגש נפרד) הם ביטויים שימושיים מאוד בבידוק.",
-                          "isOptimal": true
-                        },
-                        {
-                          "textEn": "Yes, I have three big bottles of water and soup inside.",
-                          "textHe": "כן, יש לי בפנים שלושה בקבוקים גדולים של מים ומרק.",
-                          "nextNodeId": "step2",
-                          "feedbackHe": "✗ בבידוק ביטחוני אסור להעביר נוזלים מעל 100 מ״ל בתיק היד.",
-                          "isOptimal": false
-                        },
-                        {
-                          "textEn": "Where I need to throw my computer?",
-                          "textHe": "איפה אני צריך לזרוק את המחשב שלי?",
-                          "nextNodeId": "step2",
-                          "feedbackHe": "✗ שגיאת תחביר ('Where do I need to') וטעות בפועל (אומרים 'place' או 'put' במגש, לא 'throw').",
-                          "isOptimal": false
-                        }
-                      ]
-                    },
-                    {
-                      "id": "step3",
-                      "speakerName": "Security Officer",
-                      "speakerLineEn": "Yes, place all electronics in the grey bin and empty your pockets before walking through the metal detector.",
-                      "speakerLineHe": "כן, הנח את כל מוצרי האלקטרוניקה במגש האפור ורוקן את הכיסים לפני שתעבור בגלאי המתכות.",
-                      "options": [
-                        {
-                          "textEn": "My pockets are completely empty. Should I also remove my belt and watch?",
-                          "textHe": "הכיסים שלי ריקים לחלוטין. האם עליי להסיר גם את החגורה והשעון?",
-                          "nextNodeId": "step4",
-                          "feedbackHe": "✓ אנגלית טבעית ומנומסת מאוד!",
-                          "isOptimal": true
-                        },
-                        {
-                          "textEn": "I keep my keys and coins in my pocket so the machine will sing.",
-                          "textHe": "אני משאיר את המפתחות והמטבעות בכיס כדי שהמכונה תשיר.",
-                          "nextNodeId": "step3",
-                          "feedbackHe": "✗ השארת מתכות בכיסים תפעיל את האזעקה של גלאי המתכות (metal detector).",
-                          "isOptimal": false
-                        },
-                        {
-                          "textEn": "Why you want to steal my watch?",
-                          "textHe": "למה אתה רוצה לגנוב את השעון שלי?",
-                          "nextNodeId": "step3",
-                          "feedbackHe": "✗ תגובה לא הולמת בבידוק ביטחוני ושגויה דקדוקית ('Why do you...').",
-                          "isOptimal": false
-                        }
-                      ]
-                    },
-                    {
-                      "id": "step4",
-                      "speakerName": "Security Officer",
-                      "speakerLineEn": "Please step forward. We need to swab your laptop for a quick trace test. It will only take thirty seconds.",
-                      "speakerLineHe": "אנא התקדם. אנחנו צריכים להעביר מטוש בדיקה מהיר על הלפטופ שלך. זה ייקח רק שלושים שניות.",
-                      "options": [
-                        {
-                          "textEn": "No problem at all, take your time. Let me know if you need me to unlock the screen.",
-                          "textHe": "אין שום בעיה, קח את הזמן. עדכן אותי אם תצטרך שאפתח את נעילת המסך.",
-                          "nextNodeId": "step5",
-                          "feedbackHe": "✓ תשובה רגועה, משתפת פעולה ומנוסחת היטב!",
-                          "isOptimal": true
-                        },
-                        {
-                          "textEn": "Don't touch my computer or I will shout very loud!",
-                          "textHe": "אל תיגע במחשב שלי או שאצעק חזק מאוד!",
-                          "nextNodeId": "step4",
-                          "feedbackHe": "✗ סירוב לבדיקת מטוש (swab test) בשדה תעופה ימנע ממך לעלות לטיסה.",
-                          "isOptimal": false
-                        }
-                      ]
-                    },
-                    {
-                      "id": "step5",
-                      "speakerName": "Security Officer",
-                      "speakerLineEn": "The test is clear. You can pack your belongings back into your bag. What gate is your flight departing from?",
-                      "speakerLineHe": "הבדיקה תקינה. אתה יכול לארוז חזרה את החפצים שלך לתיק. מאיזה שער הטיסה שלך ממריאה?",
-                      "options": [
-                        {
-                          "textEn": "Thank you, officer! My flight departs from Gate C14, and boarding starts in forty minutes.",
-                          "textHe": "תודה לך, אדוני השוטר! הטיסה שלי ממריאה משער C14, והעלייה למטוס מתחילה בעוד ארבעים דקות.",
-                          "nextNodeId": "ending",
-                          "feedbackHe": "✓ מושלם! 'Departs from Gate...' ו-'boarding starts' הם ביטויי תעופה מדויקים.",
-                          "isOptimal": true
-                        },
-                        {
-                          "textEn": "My airplane is flying from the roof yesterday.",
-                          "textHe": "המטוס שלי טס מהגג אתמול.",
-                          "nextNodeId": "step5",
-                          "feedbackHe": "✗ משפט חסר היגיון ושגוי בזמנים.",
-                          "isOptimal": false
-                        }
-                      ]
-                    },
-                    {
-                      "id": "ending",
-                      "speakerName": "Security Officer",
-                      "speakerLineEn": "Gate C14 is straight ahead to the right. Have a safe and pleasant flight!",
-                      "speakerLineHe": "שער C14 נמצא ישר ומימין. שתהיה לך טיסה בטוחה ונעימה!",
-                      "isEnding": true,
-                      "options": []
-                    }
-                  ]
-                }
-            """.trimIndent())
-        }
-
-        if (isLondonApartment) {
-            return JSONObject("""
-                {
-                  "id": "ai_${System.currentTimeMillis()}",
-                  "categoryHe": "שיחות AI ✨",
-                  "titleHe": "$t",
-                  "titleEn": "Negotiating an Apartment Lease in London",
-                  "difficultyHe": "$difficultyHe",
-                  "nodes": [
-                    {
-                      "id": "start",
-                      "speakerName": "London Estate Agent",
-                      "speakerLineEn": "Welcome to the flat in Camden! The asking rent is £2,100 per month, excluding council tax and utilities. What do you think?",
-                      "speakerLineHe": "ברוך הבא לדירה בקמדן! שכר הדירה המבוקש הוא 2,100 פאונד לחודש, לא כולל ארנונה וחשבונות. מה דעתך?",
-                      "options": [
-                        {
-                          "textEn": "The flat is lovely, but £2,100 is slightly above my budget. Would the landlord consider £1,900 if I sign a long-term lease?",
-                          "textHe": "הדירה מקסימה, אבל 2,100 פאונד זה מעט מעל התקציב שלי. האם בעל הדירה ישקול 1,900 פאונד אם אחתום על חוזה לטווח ארוך?",
-                          "nextNodeId": "step2",
-                          "feedbackHe": "✓ פתיחת משא ומתן מנומסת ומשכנעת מאוד באנגלית בריטית!",
-                          "isOptimal": true
-                        },
-                        {
-                          "textEn": "You are crazy! This price is robbery in the middle of the day!",
-                          "textHe": "אתה משוגע! המחיר הזה הוא שוד לאור יום!",
-                          "nextNodeId": "start",
-                          "feedbackHe": "✗ פנייה תוקפנית ולא מקצועית שתגרום לסוכן הנדל״ן לדחות את ההצעה שלך מיד.",
-                          "isOptimal": false
-                        },
-                        {
-                          "textEn": "Yes, I want to buy the council tax for two thousand pounds.",
-                          "textHe": "כן, אני רוצה לקנות את הארנונה באלפיים פאונד.",
-                          "nextNodeId": "start",
-                          "feedbackHe": "✗ אי הבנת המושג: Council tax היא ארנונה עירונית בבריטניה, לא משהו שקונים.",
-                          "isOptimal": false
-                        }
-                      ]
-                    },
-                    {
-                      "id": "step2",
-                      "speakerName": "London Estate Agent",
-                      "speakerLineEn": "The landlord might compromise at £1,950 if you can move in on the 1st of next month and provide employment references.",
-                      "speakerLineHe": "בעל הדירה עשוי להתפשר על 1,950 פאונד אם תוכל להיכנס ב-1 לחודש הבא ולספק המלצות ממקום העבודה.",
-                      "options": [
-                        {
-                          "textEn": "That sounds fair! I have my employment contract and bank statements ready, provided the landlord replaces the old mattress.",
-                          "textHe": "זה נשמע הוגן! חוזה ההעסקה ודפי הבנק שלי מוכנים, בתנאי שבעל הדירה יחליף את המזרן הישן.",
-                          "nextNodeId": "step3",
-                          "feedbackHe": "✓ מצוין! השתמשת נכון ב-'provided' (בתנאי ש...) להצבת תנאי נגדי במשא ומתן.",
-                          "isOptimal": true
-                        },
-                        {
-                          "textEn": "I don't have any job and I never pay rent on time.",
-                          "textHe": "אין לי שום עבודה ואני אף פעם לא משלם שכר דירה בזמן.",
-                          "nextNodeId": "step2",
-                          "feedbackHe": "✗ תשובה שתפסול אותך מיידית מבדיקת הרקע (Referencing) של הסוכנות.",
-                          "isOptimal": false
-                        }
-                      ]
-                    },
-                    {
-                      "id": "step3",
-                      "speakerName": "London Estate Agent",
-                      "speakerLineEn": "Agreed, a brand-new mattress will be delivered before you move in. Now, let's discuss the five-week security deposit and the break clause.",
-                      "speakerLineHe": "מוסכם, מזרן חדש לגמרי יסופק לפני שתיכנס. כעת, בוא נדון בפיקדון של חמישה שבועות ובסעיף היציאה מהחוזה.",
-                      "options": [
-                        {
-                          "textEn": "Will my deposit be protected in a government-approved scheme, and can we include a six-month break clause?",
-                          "textHe": "האם הפיקדון שלי יהיה מוגן בתוכנית ממשלתית מאושרת, והאם נוכל לכלול סעיף יציאה אחרי חצי שנה?",
-                          "nextNodeId": "ending",
-                          "feedbackHe": "✓ אלוף! 'Break clause' (סעיף יציאה) ו-'deposit protection scheme' הם מונחי מפתח בשכירות בלונדון.",
-                          "isOptimal": true
-                        },
-                        {
-                          "textEn": "Please break the windows after six months.",
-                          "textHe": "בבקשה תשבור את החלונות אחרי שישה חודשים.",
-                          "nextNodeId": "step3",
-                          "feedbackHe": "✗ מלכודת מילים! 'Break clause' הוא סעיף יציאה מוקדמת מחוזה, לא שבירת חפצים.",
-                          "isOptimal": false
-                        }
-                      ]
-                    },
-                    {
-                      "id": "ending",
-                      "speakerName": "London Estate Agent",
-                      "speakerLineEn": "Brilliant! I've just sent the tenancy agreement to your inbox at the reduced rate of £1,950. Welcome to your new London home!",
-                      "speakerLineHe": "נהדר! שלחתי כעת את הסכם השכירות לתיבת המייל שלך בתעריף המופחת של 1,950 פאונד. ברוך הבא לביתך החדש בלונדון!",
-                      "isEnding": true,
-                      "options": []
-                    }
-                  ]
-                }
-            """.trimIndent())
-        }
-
         return JSONObject().apply {
             put("id", "ai_${System.currentTimeMillis()}")
-            put("categoryHe", "שיחות AI ✨")
+            put("categoryHe", "שיחות AI")
             put("titleHe", t)
             put("titleEn", "Interactive English Roleplay Session")
             put("difficultyHe", difficultyHe)
 
             val nodes = JSONArray()
-
             nodes.put(JSONObject().apply {
                 put("id", "start")
-                put("speakerName", if (isDentistOrDoctor) "Specialist Doctor" else if (isBank) "Bank Advisor" else "Service Coordinator")
-                put("speakerLineEn", "Hello and welcome! I understand you are here regarding an urgent matter today. Could you please explain the exact details so I can assist you right away?")
-                put("speakerLineHe", "שלום וברוך הבא! אני מבין שהגעת בנוגע לעניין חשוב היום ($t). האם תוכל להסביר את הפרטים המדויקים כדי שאוכל לסייע לך מיד?")
+                put("speakerName", "Service Coordinator")
+                put("speakerLineEn", "Hello and welcome! Could you please explain the exact details so I can assist you right away?")
+                put("speakerLineHe", "שלום וברוך הבא! האם תוכל להסביר את הפרטים המדויקים כדי שאוכל לסייע לך מיד?")
                 put("options", JSONArray().apply {
                     put(JSONObject().apply {
                         put("textEn", "Hi! Thank you for seeing me. Let me explain my situation clearly and what I am hoping to resolve today.")
                         put("textHe", "היי! תודה שקיבלת אותי. תן לי להסביר את המצב שלי בבירור ומה אני מקווה לפתור היום.")
                         put("nextNodeId", "step2")
-                        put("feedbackHe", "✓ פתיחה מנומסת, רהוטה וברורה מאוד באנגלית!")
+                        put("feedbackHe", "פתיחה מנומסת, רהוטה וברורה מאוד באנגלית!")
                         put("isOptimal", true)
                     })
                     put(JSONObject().apply {
                         put("textEn", "I am not know why I am standing in this place now.")
                         put("textHe", "אני לא יודע למה אני עומד במקום הזה עכשיו.")
                         put("nextNodeId", "start")
-                        put("feedbackHe", "✗ שגיאת דקדוק! באנגלית לא אומרים 'I am not know' אלא 'I do not know'.")
-                        put("isOptimal", false)
-                    })
-                    put(JSONObject().apply {
-                        put("textEn", "Give me solution now without asking questions!")
-                        put("textHe", "תן לי פתרון עכשיו בלי לשאול שאלות!")
-                        put("nextNodeId", "start")
-                        put("feedbackHe", "✗ פנייה בוטה מדי וחסרת תווית יידוע ('a solution').")
+                        put("feedbackHe", "שגיאת דקדוק! באנגלית לא אומרים 'I am not know' אלא 'I do not know'.")
                         put("isOptimal", false)
                     })
                 })
             })
-
             nodes.put(JSONObject().apply {
                 put("id", "step2")
-                put("speakerName", "Representative")
-                put("speakerLineEn", "I see what you mean. We have two options available: a standard procedure that takes three business days, or an express priority track. Which do you prefer?")
-                put("speakerLineHe", "אני מבין למה אתה מתכוון. יש לנו שתי אפשרויות זמינות: הליך רגיל שלוקח שלושה ימי עסקים, או מסלול אקספרס מהיר. מה אתה מעדיף?")
-                put("options", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("textEn", "I'm on a tight schedule, so I'd prefer the express priority track. How much does it cost, and is there any extra fee?")
-                        put("textHe", "אני בלוח זמנים צפוף, לכן אעדיף את מסלול האקספרס המהיר. כמה זה עולה והאם יש עמלה נוספת?")
-                        put("nextNodeId", "step3")
-                        put("feedbackHe", "✓ מעולה! 'On a tight schedule' (בלו״ז צפוף) הוא ביטוי טבעי ושימושי מאוד.")
-                        put("isOptimal", true)
-                    })
-                    put(JSONObject().apply {
-                        put("textEn", "How many moneys is the fast thing?")
-                        put("textHe", "כמה כספים זה הדבר המהיר?")
-                        put("nextNodeId", "step2")
-                        put("feedbackHe", "✗ שגיאה! המילה money אינה ספירה באנגלית—שואלים 'How much does it cost?' ולא 'How many moneys'.")
-                        put("isOptimal", false)
-                    })
-                })
-            })
-
-            nodes.put(JSONObject().apply {
-                put("id", "step3")
-                put("speakerName", "Representative")
-                put("speakerLineEn", "There is normally a $35 express fee, but since this is your first visit, I can waive half of the fee if we complete the paperwork now.")
-                put("speakerLineHe", "בדרך כלל יש עמלת אקספרס של 35 דולר, אך מאחר שזה הביקור הראשון שלך, אוכל לוותר על מחצית מהעמלה אם נשלים את הטפסים כעת.")
-                put("options", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("textEn", "I really appreciate that! What identification or documents do you need from me to finalize the process?")
-                        put("textHe", "אני ממש מעריך את זה! אילו מסמכים או אמצעי זיהוי אתה צריך ממני כדי להשלים את התהליך?")
-                        put("nextNodeId", "step4")
-                        put("feedbackHe", "✓ מצוין! הבנת שהפועל 'waive' פירושו לוותר על עמלה/תשלום, והגבת בנימוס.")
-                        put("isOptimal", true)
-                    })
-                    put(JSONObject().apply {
-                        put("textEn", "Why you wave your hand at me for 35 dollars?")
-                        put("textHe", "למה אתה מנופף לי ביד בשביל 35 דולר?")
-                        put("nextNodeId", "step3")
-                        put("feedbackHe", "✗ מלכודת מילים שנשמעות זהה (Homophones)! המילה 'waive' פירושה לוותר על תשלום/חוב, בעוד ש-'wave' היא לנופף ביד.")
-                        put("isOptimal", false)
-                    })
-                })
-            })
-
-            nodes.put(JSONObject().apply {
-                put("id", "step4")
-                put("speakerName", "Representative")
-                put("speakerLineEn", "Everything is entered into our system. Please review the summary on the screen and confirm that your contact details are accurate.")
-                put("speakerLineHe", "הכל הוזן למערכת שלנו. אנא עבור על הסיכום שעל המסך ואשר שפרטי הקשר שלך מדויקים.")
-                put("options", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("textEn", "I've double-checked the spelling of my name and email address—everything looks completely accurate!")
-                        put("textHe", "בדקתי פעמיים את איות השם וכתובת האימייל שלי — הכל נראה מדויק לחלוטין!")
-                        put("nextNodeId", "ending")
-                        put("feedbackHe", "✓ מושלם! 'Double-checked' הוא ביטוי מצוין לאימות פרטים.")
-                        put("isOptimal", true)
-                    })
-                    put(JSONObject().apply {
-                        put("textEn", "The screen is made of glass and plastic.")
-                        put("textHe", "המסך עשוי מזכוכית ופלסטיק.")
-                        put("nextNodeId", "step4")
-                        put("feedbackHe", "✗ לא ענית לבקשה לאשר את נכונות הפרטים על המסך.")
-                        put("isOptimal", false)
-                    })
-                })
-            })
-
-            nodes.put(JSONObject().apply {
-                put("id", "ending")
                 put("speakerName", "Representative")
                 put("speakerLineEn", "All set! Your official confirmation has been sent to your email. Thank you, and have a wonderful day!")
                 put("speakerLineHe", "הכל מוכן! האישור הרשמי שלך נשלח לאימייל. תודה רבה ושיהיה לך יום נפלא!")
                 put("isEnding", true)
                 put("options", JSONArray())
             })
-
             put("nodes", nodes)
-        }
-    }
-
-    suspend fun generateFreeChatReply(userMessage: String, history: List<ChatMessage>): FreeChatResponse = withContext(Dispatchers.IO) {
-        runCatching {
-            val systemPrompt = """
-                You are a friendly, conversational English tutor for Hebrew speakers.
-                Respond in natural, engaging English (1-2 sentences).
-                Analyze the user's sentence for grammar, phrasing, or spelling mistakes:
-                - If there is a mistake, explain it constructively in Hebrew in "correctionHe".
-                - If the English is completely natural and correct, set "correctionHe" to null.
-                Format output strictly as JSON: {"replyEn": "...", "correctionHe": "..."}
-            """.trimIndent()
-
-            val jsonStr = requestAiJson(systemPrompt, userMessage)
-            val obj = extractCleanJsonObject(jsonStr)
-            val replyEn = sanitizeEnglishOnly(obj.optString("replyEn"), "That sounds very interesting! Tell me more about that.")
-            val correctionHe = if (obj.has("correctionHe") && !obj.isNull("correctionHe") && obj.getString("correctionHe").isNotBlank()) {
-                obj.getString("correctionHe")
-            } else null
-
-            FreeChatResponse(replyEn, correctionHe)
-        }.getOrElse {
-            FreeChatResponse("That sounds really interesting! Tell me more about that.", null)
         }
     }
 
@@ -742,23 +570,21 @@ class ConversationRepository(private val context: Context) {
             val onlineAttempt = runCatching {
                 val systemPrompt = """
                     Return ONLY raw valid JSON (no markdown) for a 5-stage English roleplay scenario for Hebrew speakers.
-                    IMPORTANT RULES:
-                    1. "speakerLineEn" and "textEn" MUST be 100% pure English (NEVER put Hebrew words inside English sentences).
-                    2. Every node MUST have a complete Hebrew translation in "speakerLineHe", and every option MUST have a complete Hebrew translation in "textHe".
-                    3. Nodes: "start", "step2", "step3", "step4", "ending".
-                    4. Each non-ending node must have 3 options: 1 with "isOptimal": true ("nextNodeId" -> next step) and 2 with "isOptimal": false ("nextNodeId" -> same step).
+                    "speakerLineEn" and "textEn" MUST be 100% pure English.
+                    Include full Hebrew translations in "speakerLineHe" and "textHe".
+                    Nodes: "start", "step2", "step3", "step4", "ending".
                 """.trimIndent()
 
                 val userPrompt = """
                     Topic: "$topicPrompt", Difficulty: "$difficultyHe".
                     JSON format:
-                    {"id":"ai_1","categoryHe":"שיחות AI ✨","titleHe":"$topicPrompt","titleEn":"English Roleplay","difficultyHe":"$difficultyHe","nodes":[{"id":"start","speakerName":"Officer","speakerLineEn":"Pure English sentence...","speakerLineHe":"תרגום מלא לעברית...","isEnding":false,"options":[{"textEn":"Pure English correct response...","textHe":"תרגום לעברית...","nextNodeId":"step2","feedbackHe":"✓ הסבר בעברית","isOptimal":true},{"textEn":"Pure English wrong response...","textHe":"תרגום לעברית...","nextNodeId":"start","feedbackHe":"✗ הסבר בעברית","isOptimal":false}]},{"id":"ending","speakerName":"Officer","speakerLineEn":"Pure English closing...","speakerLineHe":"תרגום סיום לעברית...","isEnding":true,"options":[]}]}
+                    {"id":"ai_1","categoryHe":"שיחות AI","titleHe":"$topicPrompt","titleEn":"English Roleplay","difficultyHe":"$difficultyHe","nodes":[{"id":"start","speakerName":"Officer","speakerLineEn":"Pure English sentence...","speakerLineHe":"תרגום מלא לעברית...","isEnding":false,"options":[{"textEn":"Pure English correct response...","textHe":"תרגום לעברית...","nextNodeId":"step2","feedbackHe":"הסבר בעברית","isOptimal":true},{"textEn":"Pure English wrong response...","textHe":"תרגום לעברית...","nextNodeId":"start","feedbackHe":"הסבר בעברית","isOptimal":false}]},{"id":"ending","speakerName":"Officer","speakerLineEn":"Pure English closing...","speakerLineHe":"תרגום סיום לעברית...","isEnding":true,"options":[]}]}
                 """.trimIndent()
 
                 val responseText = requestAiJson(systemPrompt, userPrompt)
                 val jsonObj = extractCleanJsonObject(responseText)
                 jsonObj.put("id", "ai_${System.currentTimeMillis()}")
-                jsonObj.put("categoryHe", "שיחות AI ✨")
+                jsonObj.put("categoryHe", "שיחות AI")
                 if (jsonObj.optString("titleHe").isBlank()) {
                     jsonObj.put("titleHe", topicPrompt)
                 }
@@ -784,62 +610,23 @@ class ConversationRepository(private val context: Context) {
         nextTargetNodeId: String
     ): Result<List<DialogueOption>> = withContext(Dispatchers.IO) {
         runCatching {
-            val onlineAttempt = runCatching {
-                val systemPrompt = "Return ONLY a valid JSON array of 2 pure English response options for Hebrew speakers (with full Hebrew 'textHe' and 'feedbackHe'): 1 optimal (true) and 1 grammar mistake trap (false)."
-                val userPrompt = """
-                    Speaker (${node.speakerName}) says: "${node.speakerLineEn}"
-                    JSON array format:
-                    [{"textEn":"Pure English...","textHe":"תרגום לעברית...","nextNodeId":"$nextTargetNodeId","feedbackHe":"✓ ...","isOptimal":true},{"textEn":"Pure English mistake...","textHe":"תרגום לעברית...","nextNodeId":"${node.id}","feedbackHe":"✗ ...","isOptimal":false}]
-                """.trimIndent()
-
-                val responseText = requestAiJson(systemPrompt, userPrompt)
-                val arr = extractCleanJsonArray(responseText)
-                val list = mutableListOf<DialogueOption>()
-                for (i in 0 until arr.length()) {
-                    val o = arr.optJSONObject(i) ?: continue
-                    val isOpt = o.optBoolean("isOptimal", false)
-                    val en = sanitizeEnglishOnly(o.optString("textEn").trim(), "")
-                    var he = o.optString("textHe").trim()
-                    if (en.isNotEmpty() && he.isEmpty()) {
-                        he = translateEnToHeFallback(en)
-                    }
-                    if (en.isNotEmpty()) {
-                        list.add(
-                            DialogueOption(
-                                textEn = en,
-                                textHe = he,
-                                nextNodeId = if (isOpt) nextTargetNodeId else node.id,
-                                feedbackHe = o.optString("feedbackHe").ifBlank {
-                                    if (isOpt) "✓ תשובה חלופית מצוינת!" else "✗ שגיאת דקדוק או הקשר."
-                                }.trim(),
-                                isOptimal = isOpt
-                            )
-                        )
-                    }
-                }
-                if (list.isEmpty()) throw IllegalStateException("Empty options")
-                list
-            }
-
-            onlineAttempt.getOrElse {
-                val baseOptimal = node.options.firstOrNull { it.isOptimal }
-                listOf(
-                    DialogueOption(
-                        textEn = if (baseOptimal != null) "Certainly! ${baseOptimal.textEn}" else "Could you please clarify that point so we can proceed?",
-                        textHe = if (baseOptimal != null) "בוודאי! ${baseOptimal.textHe}" else "האם תוכל להבהיר את הנקודה הזו כדי שנוכל להתקדם?",
-                        nextNodeId = nextTargetNodeId,
-                        feedbackHe = "✓ ניסוח חלופי מנומס ומדויק שמקדם את השיחה!",
-                        isOptimal = true
-                    ),
-                    DialogueOption(
-                        textEn = "I am agree with you very much about this thing.",
-                        textHe = "אני מסכים איתך מאוד על הדבר הזה.",
-                        nextNodeId = node.id,
-                        feedbackHe = "✗ מלכודת דקדוק קלאסית של דוברי עברית! באנגלית 'agree' הוא פועל רגיל ולכן אומרים 'I agree' ולעולם לא 'I am agree'.",
-                        isOptimal = false
-                    )
+            val baseOptimal = node.options.firstOrNull { it.isOptimal }
+            listOf(
+                DialogueOption(
+                    textEn = if (baseOptimal != null) "Certainly! ${baseOptimal.textEn}" else "Could you please clarify that point so we can proceed?",
+                    textHe = if (baseOptimal != null) "בוודאי! ${baseOptimal.textHe}" else "האם תוכל להבהיר את הנקודה הזו כדי שנוכל להתקדם?",
+                    nextNodeId = nextTargetNodeId,
+                    feedbackHe = "ניסוח חלופי מנומס ומדויק שמקדם את השיחה!",
+                    isOptimal = true
+                ),
+                DialogueOption(
+                    textEn = "I am agree with you very much about this thing.",
+                    textHe = "אני מסכים איתך מאוד על הדבר הזה.",
+                    nextNodeId = node.id,
+                    feedbackHe = "מלכודת דקדוק קלאסית של דוברי עברית! באנגלית 'agree' הוא פועל רגיל ולכן אומרים 'I agree' ולעולם לא 'I am agree'.",
+                    isOptimal = false
                 )
-            }
+            )
         }
     }
 }
