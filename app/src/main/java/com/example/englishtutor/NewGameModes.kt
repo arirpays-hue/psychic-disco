@@ -83,11 +83,11 @@ fun FreeFlowChatScreen(
     }
     var inputText by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
-    var voiceStatusBanner by remember { mutableStateOf<String?>(null) }
+    var voiceStatusBanner by remember { mutableStateOf("") }
 
-    // מזהה ההודעה שנלחצה בלחיצה ארוכה כדי להציג עבורה את כפתור התרגום של קנבה
-    var longPressedMsgId by remember { mutableStateOf<Long?>(null) }
-    var translatingMsgId by remember { mutableStateOf<Long?>(null) }
+    // מזהה ההודעה שנלחצה בלחיצה ארוכה כדי להציג עבורה את כפתור התרגום של קנבה (-1 = סגור)
+    var longPressedMsgId by remember { mutableLongStateOf(-1L) }
+    var translatingMsgId by remember { mutableLongStateOf(-1L) }
 
     val isMuted = speechManager.isVoiceMuted
     val isSpeakingNow = speechManager.isCurrentlySpeaking
@@ -108,7 +108,7 @@ fun FreeFlowChatScreen(
         messages = messages + userMsg
         inputText = ""
         isSending = true
-        voiceStatusBanner = null
+        voiceStatusBanner = ""
 
         scope.launch {
             val response = conversationRepo.generateFreeChatReply(cleanText, messages)
@@ -126,7 +126,6 @@ fun FreeFlowChatScreen(
         }
     }
 
-    // בקשה ישירה ליצירת מבחן אמריקאי / אינטראקציה חיה בצ'אט
     fun triggerInteractiveAiActivity(typeKey: String, labelHe: String) {
         if (isSending) return
         val userMsg = ChatMessage(text = "Please create a live interactive $labelHe for me!", isUser = true)
@@ -146,13 +145,13 @@ fun FreeFlowChatScreen(
         }
     }
 
-    // גיבוי לחלונית זיהוי קולי של אנדרואיד במקרה ששירות הרקע תפוס
+    // גיבוי לחלונית זיהוי קולי של אנדרואיד (תוקן ל-RecognizerIntent.EXTRA_RESULTS)
     val fallbackSpeechLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val spoken = result.data
-                ?.getStringArrayListExtra(RecognizerIntent.RESULTS_RECOGNITION)
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
                 ?.firstOrNull()
                 ?.trim()
                 .orEmpty()
@@ -170,12 +169,12 @@ fun FreeFlowChatScreen(
                 inputText = partial
             },
             onResult = { finalSpoken ->
-                voiceStatusBanner = null
+                voiceStatusBanner = ""
                 inputText = finalSpoken
                 sendMessage(finalSpoken)
             },
             onFallbackIntentNeeded = { intent ->
-                voiceStatusBanner = null
+                voiceStatusBanner = ""
                 runCatching { fallbackSpeechLauncher.launch(intent) }
             },
             onError = { errMsg ->
@@ -184,7 +183,6 @@ fun FreeFlowChatScreen(
         )
     }
 
-    // בקשת הרשאת מיקרופון בזמן ריצה
     val micPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -202,7 +200,7 @@ fun FreeFlowChatScreen(
                 .background(Brush.verticalGradient(listOf(DarkBg, Color(0xFF10172A), DarkBg)))
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            // --- סרגל עליון עם כפתור השתקה דו-מצבי פעיל ומגיב ---
+            // סרגל עליון עם כפתור השתקה דו-מצבי פעיל ומגיב
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -265,7 +263,7 @@ fun FreeFlowChatScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // --- סרגל אינטראקציות חיות ומבחנים אמריקאיים שה-AI מייצר בזמן אמת בתוך הצ'אט ---
+            // סרגל אינטראקציות חיות ומבחנים אמריקאיים שה-AI מייצר בזמן אמת בתוך הצ'אט
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
@@ -294,9 +292,8 @@ fun FreeFlowChatScreen(
                 )
             }
 
-            // באנר חיווי הקלטה / קול
             AnimatedVisibility(
-                visible = voiceStatusBanner != null,
+                visible = voiceStatusBanner.isNotEmpty(),
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
@@ -314,7 +311,7 @@ fun FreeFlowChatScreen(
                     CanvaSparkleIcon(tint = if (isListeningMic) ErrorCrimson else TealNeon, modifier = Modifier.size(15.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = voiceStatusBanner ?: "",
+                        text = voiceStatusBanner,
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -322,7 +319,7 @@ fun FreeFlowChatScreen(
                 }
             }
 
-            // --- רשימת ההודעות והמבחנים האינטראקטיביים בצ'אט ---
+            // רשימת ההודעות והמבחנים האינטראקטיביים בצ'אט
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).padding(vertical = 10.dp),
@@ -336,7 +333,6 @@ fun FreeFlowChatScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = if (msg.isUser) Alignment.End else Alignment.Start
                     ) {
-                        // בועת ההודעה (לחיצה רגילה = השמעה בקול, לחיצה ארוכה = פתיחת כפתור תרגום קנבה!)
                         Box(
                             modifier = Modifier
                                 .widthIn(max = 315.dp)
@@ -356,7 +352,7 @@ fun FreeFlowChatScreen(
                                         speechManager.speak(msg.text, forceEvenIfMuted = false)
                                     },
                                     onLongClick = {
-                                        longPressedMsgId = if (longPressedMsgId == msg.id) null else msg.id
+                                        longPressedMsgId = if (longPressedMsgId == msg.id) -1L else msg.id
                                     }
                                 )
                                 .padding(14.dp)
@@ -371,7 +367,6 @@ fun FreeFlowChatScreen(
                                     )
                                 }
 
-                                // תוצאת התרגום משרת גוגל מוצגת בתוך הבועה
                                 if (!msg.translatedHe.isNullOrBlank()) {
                                     Spacer(modifier = Modifier.height(8.dp))
                                     HorizontalDivider(color = StarGold.copy(alpha = 0.35f))
@@ -391,7 +386,7 @@ fun FreeFlowChatScreen(
                             }
                         }
 
-                        // --- כפתור תרגום מעוצב בקנבה שנפתח בלחיצה ארוכה על ההודעה ---
+                        // כפתור תרגום מעוצב בקנבה שנפתח בלחיצה ארוכה על ההודעה
                         AnimatedVisibility(
                             visible = isMenuOpen,
                             enter = expandVertically() + fadeIn(),
@@ -410,8 +405,8 @@ fun FreeFlowChatScreen(
                                             val updated = messages.toMutableList()
                                             updated[index] = msg.copy(translatedHe = translated)
                                             messages = updated
-                                            translatingMsgId = null
-                                            longPressedMsgId = null
+                                            translatingMsgId = -1L
+                                            longPressedMsgId = -1L
                                         }
                                     }
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -430,7 +425,6 @@ fun FreeFlowChatScreen(
                             }
                         }
 
-                        // משוב דקדוק אוטומטי אם המשתמש טעה
                         if (msg.grammarCorrection != null) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Row(
@@ -452,7 +446,6 @@ fun FreeFlowChatScreen(
                             }
                         }
 
-                        // --- ווידג'ט מבחן אמריקאי / אינטראקציה חיה בתוך הצ'אט ---
                         if (msg.interactiveQuiz != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             InChatInteractiveQuizCard(
@@ -473,17 +466,16 @@ fun FreeFlowChatScreen(
                 }
             }
 
-            // --- שורת הקלדה וכפתור מיקרופון מונפש בקנבה ---
+            // שורת הקלדה וכפתור מיקרופון מונפש בקנבה
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // כפתור ההקלדה הקולית עם אנימציית סונאר ואקוולייזר חי
                 Box(
                     modifier = Modifier.clickable(enabled = !isSending) {
                         if (isListeningMic) {
                             speechManager.stopListening()
-                            voiceStatusBanner = null
+                            voiceStatusBanner = ""
                         } else {
                             val hasMicPerm = ContextCompat.checkSelfPermission(
                                 context,
@@ -582,14 +574,13 @@ fun InteractiveChipButton(
     }
 }
 
-// כרטיס מבחן אמריקאי / אינטראקציה חיה שמופיע ישירות בתוך זרם הצ'אט
 @Composable
 fun InChatInteractiveQuizCard(
     quiz: InteractiveChatQuiz,
     onSpeakOption: (String) -> Unit,
     onRequestAnotherQuiz: () -> Unit
 ) {
-    var selectedIdx by remember { mutableStateOf<Int?>(null) }
+    var selectedIdx by remember { mutableIntStateOf(-1) }
     var showHebrewHint by remember { mutableStateOf(false) }
 
     Card(
@@ -668,14 +659,14 @@ fun InChatInteractiveQuizCard(
                 val isCorrect = idx == quiz.correctIndex
 
                 val bg = when {
-                    selectedIdx == null -> Color(0xFF1E2746)
+                    selectedIdx == -1 -> Color(0xFF1E2746)
                     isCorrect -> Color(0xFF0E3B2E)
                     isSelected -> Color(0xFF3B121E)
                     else -> Color(0xFF141A2E)
                 }
 
                 val borderCol = when {
-                    selectedIdx == null -> TealNeon.copy(alpha = 0.45f)
+                    selectedIdx == -1 -> TealNeon.copy(alpha = 0.45f)
                     isCorrect -> CheckNeon
                     isSelected -> ErrorCrimson
                     else -> Color.Gray.copy(alpha = 0.25f)
@@ -688,7 +679,7 @@ fun InChatInteractiveQuizCard(
                         .clip(RoundedCornerShape(14.dp))
                         .background(bg)
                         .border(1.5.dp, borderCol, RoundedCornerShape(14.dp))
-                        .clickable(enabled = selectedIdx == null) {
+                        .clickable(enabled = selectedIdx == -1) {
                             selectedIdx = idx
                             onSpeakOption(optText)
                         }
@@ -709,7 +700,7 @@ fun InChatInteractiveQuizCard(
                             )
                         }
 
-                        if (selectedIdx != null) {
+                        if (selectedIdx != -1) {
                             if (isCorrect) {
                                 CanvaCheckIcon(tint = CheckNeon, modifier = Modifier.size(18.dp))
                             } else if (isSelected) {
@@ -720,7 +711,7 @@ fun InChatInteractiveQuizCard(
                 }
             }
 
-            if (selectedIdx != null) {
+            if (selectedIdx != -1) {
                 Spacer(modifier = Modifier.height(10.dp))
                 val won = selectedIdx == quiz.correctIndex
                 Box(
@@ -859,7 +850,7 @@ fun SpellingPracticeScreen(
     var currentIndex by remember { mutableIntStateOf(0) }
     val currentWord = words.getOrNull(currentIndex) ?: WordCard("Apple", "תפוח")
     var typedInput by remember { mutableStateOf("") }
-    var resultStatus by remember { mutableStateOf<Boolean?>(null) }
+    var resultState by remember { mutableIntStateOf(0) } // 0 = טרם נבדק, 1 = נכון, 2 = שגוי
     var score by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(currentWord.english) {
@@ -912,7 +903,7 @@ fun SpellingPracticeScreen(
                     value = typedInput,
                     onValueChange = {
                         typedInput = it
-                        resultStatus = null
+                        resultState = 0
                     },
                     label = { Text("הקלד באנגלית כאן...") },
                     singleLine = true,
@@ -929,7 +920,7 @@ fun SpellingPracticeScreen(
                 Button(
                     onClick = {
                         val isCorrect = typedInput.trim().equals(currentWord.english.trim(), ignoreCase = true)
-                        resultStatus = isCorrect
+                        resultState = if (isCorrect) 1 else 2
                         if (isCorrect) {
                             score += 10
                             speechManager.speak("Correct!")
@@ -943,18 +934,18 @@ fun SpellingPracticeScreen(
                     Text("בדוק איות", color = TealNeon, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
 
-                if (resultStatus != null) {
+                if (resultState != 0) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (resultStatus == true) {
+                        if (resultState == 1) {
                             CanvaCheckIcon(tint = CheckNeon, modifier = Modifier.size(20.dp))
                         } else {
                             CanvaCloseIcon(tint = ErrorCrimson, modifier = Modifier.size(20.dp))
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            if (resultStatus == true) "איות מושלם!" else "שגוי! המילה הנכונה: ${currentWord.english}",
-                            color = if (resultStatus == true) CheckNeon else ErrorCrimson,
+                            if (resultState == 1) "איות מושלם!" else "שגוי! המילה הנכונה: ${currentWord.english}",
+                            color = if (resultState == 1) CheckNeon else ErrorCrimson,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -962,7 +953,7 @@ fun SpellingPracticeScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = {
                         typedInput = ""
-                        resultStatus = null
+                        resultState = 0
                         currentIndex = (currentIndex + 1) % words.size
                     }) {
                         Text("המילה הבאה")
@@ -991,9 +982,9 @@ fun SpeedChallengeScreen(
     var currentIdx by remember { mutableIntStateOf(0) }
     var highScore by remember { mutableIntStateOf(repo.getSpeedHighScore()) }
 
-    var selectedAnswer by remember { mutableStateOf<String?>(null) }
+    var selectedAnswer by remember { mutableStateOf("") }
     var isAnswerLocked by remember { mutableStateOf(false) }
-    var feedbackBanner by remember { mutableStateOf<String?>(null) }
+    var feedbackBanner by remember { mutableStateOf("") }
     var lastWasCorrect by remember { mutableStateOf(true) }
 
     val cardShakeX = remember { Animatable(0f) }
@@ -1033,8 +1024,8 @@ fun SpeedChallengeScreen(
             feedbackBanner = "+$bonus נקודות! תשובה נכונה"
             scope.launch {
                 delay(260)
-                selectedAnswer = null
-                feedbackBanner = null
+                selectedAnswer = ""
+                feedbackBanner = ""
                 currentIdx = (currentIdx + 1) % words.size
                 isAnswerLocked = false
             }
@@ -1051,8 +1042,8 @@ fun SpeedChallengeScreen(
                 }
                 cardShakeX.animateTo(0f, spring())
                 delay(550)
-                selectedAnswer = null
-                feedbackBanner = null
+                selectedAnswer = ""
+                feedbackBanner = ""
                 currentIdx = (currentIdx + 1) % words.size
                 isAnswerLocked = false
             }
@@ -1218,7 +1209,7 @@ fun SpeedChallengeScreen(
                     )
 
                     AnimatedVisibility(
-                        visible = feedbackBanner != null,
+                        visible = feedbackBanner.isNotEmpty(),
                         enter = expandVertically() + fadeIn(),
                         exit = shrinkVertically() + fadeOut()
                     ) {
@@ -1247,7 +1238,7 @@ fun SpeedChallengeScreen(
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = feedbackBanner ?: "",
+                                text = feedbackBanner,
                                 color = if (lastWasCorrect) CheckNeon else ErrorCrimson,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 13.sp
@@ -1257,7 +1248,7 @@ fun SpeedChallengeScreen(
                 }
 
                 val cardBorderColor = when {
-                    selectedAnswer == null -> TealNeon
+                    selectedAnswer.isEmpty() -> TealNeon
                     lastWasCorrect -> CheckNeon
                     else -> ErrorCrimson
                 }
@@ -1289,14 +1280,14 @@ fun SpeedChallengeScreen(
                         val isThisCorrectOption = opt == currentWord.hebrew
 
                         val buttonBgColor = when {
-                            selectedAnswer == null -> Color(0xFF182038)
+                            selectedAnswer.isEmpty() -> Color(0xFF182038)
                             isThisCorrectOption -> Color(0xFF0E3B2E)
                             isThisSelected && !isThisCorrectOption -> Color(0xFF3B121E)
                             else -> Color(0xFF14192B)
                         }
 
                         val buttonBorderColor = when {
-                            selectedAnswer == null -> TealNeon.copy(alpha = 0.45f)
+                            selectedAnswer.isEmpty() -> TealNeon.copy(alpha = 0.45f)
                             isThisCorrectOption -> CheckNeon
                             isThisSelected && !isThisCorrectOption -> ErrorCrimson
                             else -> Color.Gray.copy(alpha = 0.2f)
@@ -1326,7 +1317,7 @@ fun SpeedChallengeScreen(
                                     color = Color.White
                                 )
 
-                                if (selectedAnswer != null) {
+                                if (selectedAnswer.isNotEmpty()) {
                                     if (isThisCorrectOption) {
                                         CanvaCheckIcon(tint = CheckNeon, modifier = Modifier.size(20.dp))
                                     } else if (isThisSelected) {
