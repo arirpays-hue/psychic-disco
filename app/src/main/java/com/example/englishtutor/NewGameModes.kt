@@ -48,6 +48,7 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import kotlin.random.Random
 
 data class ChatMessage(
     val id: Long = System.nanoTime(),
@@ -142,7 +143,6 @@ fun FreeFlowChatScreen(
         }
     }
 
-    // הפעלת הקלטה קולית שקטה בתוך האפליקציה בלבד (ללא חלון קופץ של גוגל!)
     fun beginInAppVoiceRecording() {
         voiceStatusBanner = "מקשיב באנגלית... דבר כעת (לחץ שוב על המיקרופון לסיום)"
         speechManager.startListeningInApp(
@@ -439,7 +439,6 @@ fun FreeFlowChatScreen(
                 }
             }
 
-            // שורת הקלדה וכפתור מיקרופון מונפש בקנבה (ללא שום חלונית חיצונית של גוגל!)
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -821,7 +820,7 @@ fun AiThinkingBubble() {
 }
 
 // -------------------------------------------------------------
-// 2. מבחן איות והקלדה אינסופי (ה-AI מוסיף שאלות ברקע באופן שקט!)
+// 2. מבחן איות והקלדה אקראי ואינסופי
 // -------------------------------------------------------------
 @Composable
 fun SpellingPracticeScreen(
@@ -832,24 +831,23 @@ fun SpellingPracticeScreen(
     val context = LocalContext.current
     val wordRepo = remember { WordRepository(context.applicationContext) }
 
-    // רשימה דינמית שמתרחבת בשקט ברקע על ידי ה-AI כך שלעולם לא ייגמרו השאלות!
-    var dynamicPool by remember { mutableStateOf(words.shuffled()) }
-    var currentIndex by remember { mutableIntStateOf(0) }
-    val currentWord = dynamicPool.getOrNull(currentIndex) ?: WordCard("Resilience", "חוסן נפשי")
+    var allPool by remember { mutableStateOf(words) }
+    var askedSet by remember { mutableStateOf(emptySet<String>()) }
+    var currentWord by remember {
+        mutableStateOf(wordRepo.pickRandomNonRepeatingWord(allPool, emptySet()))
+    }
+    var questionCount by remember { mutableIntStateOf(1) }
 
     var typedInput by remember { mutableStateOf("") }
     var resultState by remember { mutableIntStateOf(0) }
     var score by remember { mutableIntStateOf(0) }
 
-    // בכל פעם שמתקרבים ל-4 השאלות האחרונות, ה-AI שואב ברקע מילים חדשות ומוסיף אותן בשקט לתור!
-    LaunchedEffect(currentIndex, dynamicPool.size) {
-        if (currentIndex >= dynamicPool.size - 4) {
-            val newAiWords = wordRepo.fetchInfiniteAiWordsSilently(dynamicPool)
+    // שאיבת מילים חדשות מה-AI ברקע
+    LaunchedEffect(questionCount) {
+        if (questionCount % 4 == 0) {
+            val newAiWords = wordRepo.fetchInfiniteAiWordsSilently(allPool)
             if (newAiWords.isNotEmpty()) {
-                dynamicPool = dynamicPool + newAiWords
-            } else {
-                // אם כולן כבר נלמדו, מערבב תור חדש ברקע כדי שהמשחק ימשיך לנצח
-                dynamicPool = dynamicPool + words.shuffled()
+                allPool = (allPool + newAiWords).distinctBy { it.normalizedKey }
             }
         }
     }
@@ -956,9 +954,13 @@ fun SpellingPracticeScreen(
                     Button(onClick = {
                         typedInput = ""
                         resultState = 0
-                        currentIndex++
+                        val updatedAsked = HashSet(askedSet)
+                        updatedAsked.add(currentWord.normalizedKey)
+                        askedSet = updatedAsked
+                        currentWord = wordRepo.pickRandomNonRepeatingWord(allPool, updatedAsked)
+                        questionCount++
                     }) {
-                        Text("המילה הבאה")
+                        Text("המילה הבאה (אקראית)")
                     }
                 }
             }
@@ -967,7 +969,7 @@ fun SpellingPracticeScreen(
 }
 
 // -------------------------------------------------------------
-// 3. אתגר 60 שניות אינסופי (ה-AI מזריק שאלות חדשות ברקע בלי שיראו!)
+// 3. אתגר 60 שניות עם הגרלה אקראית חדשה בכל שאלה וללא חזרות!
 // -------------------------------------------------------------
 @Composable
 fun SpeedChallengeScreen(
@@ -977,9 +979,12 @@ fun SpeedChallengeScreen(
 ) {
     val scope = rememberCoroutineScope()
 
-    // מאגר שאלות אינסופי שמתמלא ברקע על ידי ה-AI בזמן המשחק!
-    var infiniteQueue by remember { mutableStateOf(words.shuffled()) }
-    var currentIdx by remember { mutableIntStateOf(0) }
+    var masterPool by remember { mutableStateOf(words) }
+    var sessionAskedKeys by remember { mutableStateOf(emptySet<String>()) }
+    var currentWord by remember {
+        mutableStateOf(repo.pickRandomNonRepeatingWord(masterPool, emptySet()))
+    }
+    var questionStep by remember { mutableIntStateOf(1) }
 
     var timeLeft by remember { mutableIntStateOf(60) }
     var isRunning by remember { mutableStateOf(false) }
@@ -996,27 +1001,42 @@ fun SpeedChallengeScreen(
 
     val cardShakeX = remember { Animatable(0f) }
 
-    val currentWord = infiniteQueue.getOrNull(currentIdx) ?: WordCard("Run", "לרוץ")
-
-    // שאיבה שקטה ברקע של מילים ושאלות חדשות מה-AI בכל פעם שמתקדמים בשאלות
-    LaunchedEffect(currentIdx, isRunning) {
-        if (currentIdx >= infiniteQueue.size - 6) {
-            val aiNewWords = repo.fetchInfiniteAiWordsSilently(infiniteQueue)
+    // שאיבת מילים חדשות מה-AI ברקע תוך כדי משחק
+    LaunchedEffect(questionStep, isRunning) {
+        if (isRunning && questionStep % 5 == 0) {
+            val aiNewWords = repo.fetchInfiniteAiWordsSilently(masterPool)
             if (aiNewWords.isNotEmpty()) {
-                infiniteQueue = infiniteQueue + aiNewWords.shuffled()
-            } else {
-                infiniteQueue = infiniteQueue + words.shuffled()
+                masterPool = (masterPool + aiNewWords).distinctBy { it.normalizedKey }
             }
         }
     }
 
-    val options = remember(currentIdx, infiniteQueue.size) {
-        val wrong = infiniteQueue
-            .filter { it.hebrew != currentWord.hebrew }
-            .shuffled()
-            .take(3)
+    // מגריל מילה אקראית חדשה שטרם הופיעה
+    fun advanceToNextRandomQuestion() {
+        val updatedAsked = HashSet(sessionAskedKeys)
+        updatedAsked.add(currentWord.normalizedKey)
+        // אם המשתמש ענה על כל המילים במאגר הענק, מאפסים את הסט המקומי וממשיכים להגריל באקראי
+        if (updatedAsked.size >= masterPool.size - 2) {
+            updatedAsked.clear()
+            updatedAsked.add(currentWord.normalizedKey)
+        }
+        sessionAskedKeys = updatedAsked
+        currentWord = repo.pickRandomNonRepeatingWord(masterPool, updatedAsked)
+        questionStep++
+    }
+
+    // יצירת 4 אפשרויות אקראיות לחלוטין עם זרע זמן ייחודי לכל שאלה
+    val options = remember(currentWord.english, questionStep) {
+        val rng = Random(System.nanoTime())
+        val wrong = masterPool
+            .asSequence()
             .map { it.hebrew }
-        (wrong + currentWord.hebrew).shuffled()
+            .distinct()
+            .filter { it != currentWord.hebrew }
+            .toList()
+            .shuffled(rng)
+            .take(3)
+        (wrong + currentWord.hebrew).shuffled(rng)
     }
 
     LaunchedEffect(isRunning) {
@@ -1049,7 +1069,7 @@ fun SpeedChallengeScreen(
                 delay(240)
                 selectedAnswer = ""
                 feedbackBanner = ""
-                currentIdx++
+                advanceToNextRandomQuestion()
                 isAnswerLocked = false
             }
         } else {
@@ -1067,7 +1087,7 @@ fun SpeedChallengeScreen(
                 delay(520)
                 selectedAnswer = ""
                 feedbackBanner = ""
-                currentIdx++
+                advanceToNextRandomQuestion()
                 isAnswerLocked = false
             }
         }
@@ -1123,7 +1143,7 @@ fun SpeedChallengeScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "תשובה נכונה: +10 נקודות (רצף מזכה ב-+15)\nתשובה שגויה: קנס של 5- נקודות ו-2- שניות מהשעון!",
+                            text = "בכל משחק מוגרלות שאלות אקראיות חדשות ללא חזרות!\nתשובה נכונה: +10 נקודות • טעות: 5- נקודות ו-2- שניות",
                             color = Color.LightGray,
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center,
@@ -1137,12 +1157,13 @@ fun SpeedChallengeScreen(
                                 correctCount = 0
                                 wrongCount = 0
                                 timeLeft = 60
+                                advanceToNextRandomQuestion()
                                 isRunning = true
                             },
                             modifier = Modifier.height(54.dp).fillMaxWidth(0.8f),
                             colors = ButtonDefaults.buttonColors(containerColor = TealNeon)
                         ) {
-                            Text("התחל אתגר!", color = DarkBg, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                            Text("התחל אתגר אקראי!", color = DarkBg, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
                         }
                     }
                 }
@@ -1177,7 +1198,7 @@ fun SpeedChallengeScreen(
                                 comboStreak = 0
                                 correctCount = 0
                                 wrongCount = 0
-                                currentIdx++
+                                advanceToNextRandomQuestion()
                                 isRunning = true
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = TealDark),
@@ -1185,7 +1206,7 @@ fun SpeedChallengeScreen(
                         ) {
                             CanvaRefreshIcon(tint = TealNeon, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("שחק שוב (עם שאלות חדשות)", color = TealNeon, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("שחק שוב (הגרלת שאלות חדשות)", color = TealNeon, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
                     }
                 }
