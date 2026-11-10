@@ -1,6 +1,11 @@
 package com.example.englishtutor
 
-import android.widget.Toast
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,31 +23,76 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+data class SkillNode(
+    val level: CefrLevel,
+    val titleHe: String,
+    val descriptionHe: String,
+    val isBossBattle: Boolean = false,
+    val bossScenarioId: String? = null
+)
+
 @Composable
 fun SkillTreeScreen(
     words: List<WordCard>,
-    progressionManager: LevelProgressionManager,
-    missionManager: DailyMissionManager,
     haptic: HapticManager,
     onOpenDrawer: () -> Unit,
     onStartLevelPractice: (CefrLevel) -> Unit,
-    onLaunchScenarioCategory: (String) -> Unit
+    onLaunchBossScenario: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    val availablePoints = progressionManager.totalPoints
-    val treeVersion = progressionManager.treeVersion
-    val missionVersion = missionManager.missionVersion
+    val totalLearned = remember(words) { words.count { it.isLearned } }
 
-    val todayMissions = remember(missionVersion) {
-        missionManager.getTodayMissions()
+    val nodes = remember {
+        listOf(
+            SkillNode(
+                level = CefrLevel.A1,
+                titleHe = "שלב 1: יסודות השפה (A1)",
+                descriptionHe = "מילים בסיסיות, היכרות, ברכות והתמצאות ראשונית"
+            ),
+            SkillNode(
+                level = CefrLevel.A2,
+                titleHe = "שלב 2: נוסע עצמאי (A2)",
+                descriptionHe = "שדה תעופה, תחבורה, קניות ושיחות חולין"
+            ),
+            SkillNode(
+                level = CefrLevel.B1,
+                titleHe = "בוס ביניים: מסעדה ומלון בחו״ל",
+                descriptionHe = "פתרון תקלות בזמן אמת מול צוות המלון והמסעדה",
+                isBossBattle = true,
+                bossScenarioId = "restaurant_full_evening"
+            ),
+            SkillNode(
+                level = CefrLevel.B2,
+                titleHe = "שלב 4: אנגלית עסקית וטכנולוגיה (B2)",
+                descriptionHe = "אוצר מילים מתקדם לעבודה, משא ומתן וטכנולוגיה"
+            ),
+            SkillNode(
+                level = CefrLevel.C1,
+                titleHe = "שלב 5: שליטה אקדמית וניבים (C1)",
+                descriptionHe = "מילים מורכבות, ביטויים מעמיקים ודיוק לשוני"
+            ),
+            SkillNode(
+                level = CefrLevel.C2,
+                titleHe = "בוס סופי: ראיון ארכיטקט תוכנה בכיר",
+                descriptionHe = "קרב שיחתי מעמיק על פיתוח מערכות, ביצועים ותנאי שכר",
+                isBossBattle = true,
+                bossScenarioId = "tech_interview_deep_dive"
+            )
+        )
     }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "treePulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Reverse),
+        label = "pulseAlpha"
+    )
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Column(
@@ -51,7 +101,6 @@ fun SkillTreeScreen(
                 .background(Brush.verticalGradient(listOf(DarkBg, Color(0xFF10172A), DarkBg)))
                 .padding(horizontal = 18.dp, vertical = 14.dp)
         ) {
-            // סרגל עליון עם תצוגת נקודות היכולת (ללא כפתורי דמה שלא מובילים לכלום!)
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -70,228 +119,70 @@ fun SkillTreeScreen(
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "עץ היכולות והמשימות היומיות",
+                        text = "עץ היכולות ומסלול הבוסים",
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                     Text(
-                        text = "פתח שורשים כדי לפתוח ענפים, מילים ושיחות חדשות",
+                        text = "מילים שנלמדו: $totalLearned • לחץ על שלב לאימון",
                         color = TealNeon,
-                        fontSize = 11.sp
+                        fontSize = 12.sp
                     )
                 }
 
-                // תג נקודות יכולת חי
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF241D0C))
-                        .border(1.5.dp, StarGold, RoundedCornerShape(14.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    CanvaStarIcon(tint = StarGold, isFilled = true, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = "$availablePoints נק'",
-                        color = StarGold,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
+                CanvaIconBadge(accentColor = StarGold, badgeSize = 44.dp) {
+                    CanvaSkillTreeIcon(tint = StarGold, modifier = Modifier.size(22.dp))
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 28.dp)
+                contentPadding = PaddingValues(bottom = 24.dp)
             ) {
-                // --- חלק 1: כרטיס משימות יומיות פרוצדורליות (מועשרות ב-AI ברקע) ---
-                item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 18.dp)
-                            .border(2.dp, PurpleNeon.copy(alpha = 0.75f), RoundedCornerShape(22.dp)),
-                        shape = RoundedCornerShape(22.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF17132B))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    CanvaIconBadge(accentColor = PurpleNeon, badgeSize = 36.dp, cornerRadius = 10.dp) {
-                                        CanvaSparkleIcon(tint = PurpleNeon, modifier = Modifier.size(18.dp))
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = "משימות יומיות (AI + פרוצדורלי)",
-                                            color = Color.White,
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.ExtraBold
-                                        )
-                                        Text(
-                                            text = "השלם משימות כדי לצבור נקודות לפתיחת העץ",
-                                            color = PurpleNeon,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            todayMissions.forEach { mission ->
-                                val progress = (mission.currentCount.toFloat() / mission.targetCount.coerceAtLeast(1)).coerceIn(0f, 1f)
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(if (mission.isCompleted) Color(0xFF0E3228) else CardDark)
-                                        .border(
-                                            1.dp,
-                                            if (mission.isCompleted) CheckNeon else TealNeon.copy(alpha = 0.35f),
-                                            RoundedCornerShape(14.dp)
-                                        )
-                                        .padding(12.dp)
-                                ) {
-                                    Column {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                if (mission.isCompleted) {
-                                                    CanvaCheckIcon(tint = CheckNeon, modifier = Modifier.size(18.dp))
-                                                } else {
-                                                    CanvaBoltIcon(tint = StarGold, modifier = Modifier.size(16.dp))
-                                                }
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = mission.titleHe,
-                                                    color = if (mission.isCompleted) CheckNeon else Color.White,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    fontSize = 14.sp
-                                                )
-                                            }
-                                            Text(
-                                                text = if (mission.isCompleted) "הושלם! (+${mission.rewardPoints})" else "+${mission.rewardPoints} נק'",
-                                                color = StarGold,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = "${mission.descriptionHe} (${mission.currentCount}/${mission.targetCount})",
-                                            color = Color.LightGray,
-                                            fontSize = 12.sp
-                                        )
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        LinearProgressIndicator(
-                                            progress = { progress },
-                                            modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
-                                            color = if (mission.isCompleted) CheckNeon else TealNeon,
-                                            trackColor = DarkBg
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // --- חלק 2: שורשים וענפים של עץ היכולות ---
-                itemsIndexed(progressionManager.allTreeNodes, key = { _, n -> n.id }) { index, node ->
-                    val isUnlocked = remember(treeVersion, node.id) { progressionManager.isNodeUnlocked(node.id) }
-                    val canUnlock = remember(treeVersion, availablePoints, node.id) { progressionManager.canUnlockNode(node) }
-                    val parentUnlocked = remember(treeVersion, node.parentId) {
-                        node.parentId == null || progressionManager.isNodeUnlocked(node.parentId)
-                    }
-
+                itemsIndexed(nodes) { index, node ->
                     val levelWords = remember(words, node.level) {
                         words.filter { it.cefr.equals(node.level.name, ignoreCase = true) }
                     }
                     val learnedInLevel = levelWords.count { it.isLearned }
+                    val totalInLevel = levelWords.size.coerceAtLeast(1)
+                    val levelProgress = (learnedInLevel.toFloat() / totalInLevel.toFloat()).coerceIn(0f, 1f)
 
-                    val nodeColor = when {
-                        isUnlocked && node.isRoot -> TealNeon
-                        isUnlocked && !node.isRoot -> CheckNeon
-                        canUnlock -> StarGold
-                        else -> Color(0xFF4A5572)
+                    val accent = when {
+                        node.isBossBattle -> StarGold
+                        levelProgress >= 0.8f -> CheckNeon
+                        index % 2 == 0 -> TealNeon
+                        else -> PurpleNeon
                     }
 
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = if (node.isRoot) 0.dp else 28.dp) // הזחה לענפים שמתפצלים מהשורש!
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .border(
-                                    width = if (node.isRoot) 2.2.dp else 1.5.dp,
-                                    color = nodeColor,
-                                    shape = RoundedCornerShape(if (node.isRoot) 22.dp else 18.dp)
+                                    width = if (node.isBossBattle) 2.5.dp else 1.8.dp,
+                                    color = accent.copy(alpha = if (node.isBossBattle) pulseAlpha else 0.85f),
+                                    shape = RoundedCornerShape(24.dp)
                                 )
                                 .clickable {
-                                    when {
-                                        isUnlocked -> {
-                                            haptic.click()
-                                            if (node.unlocksScenarioCategory != null) {
-                                                onLaunchScenarioCategory(node.unlocksScenarioCategory)
-                                            } else {
-                                                onStartLevelPractice(node.level)
-                                            }
-                                        }
-                                        canUnlock -> {
-                                            val success = progressionManager.unlockNode(node)
-                                            if (success) {
-                                                haptic.success()
-                                                Toast.makeText(
-                                                    context,
-                                                    "נפתחה יכולת חדשה: ${node.titleHe}!",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        }
-                                        !parentUnlocked -> {
-                                            haptic.error()
-                                            Toast.makeText(
-                                                context,
-                                                "יש לפתוח קודם את השורש הקודם בעץ!",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                        else -> {
-                                            haptic.error()
-                                            Toast.makeText(
-                                                context,
-                                                "חסרות לך ${node.costPoints - availablePoints} נקודות לפתיחת יכולת זו",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
+                                    haptic.success()
+                                    if (node.isBossBattle && node.bossScenarioId != null) {
+                                        onLaunchBossScenario(node.bossScenarioId)
+                                    } else {
+                                        onStartLevelPractice(node.level)
                                     }
                                 },
-                            shape = RoundedCornerShape(if (node.isRoot) 22.dp else 18.dp),
+                            shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = when {
-                                    isUnlocked -> CardDark
-                                    canUnlock -> Color(0xFF231D10)
-                                    else -> Color(0xFF0E1320)
-                                }
+                                containerColor = if (node.isBossBattle) Color(0xFF221A0F) else CardDark
                             )
                         ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
+                            Column(modifier = Modifier.padding(18.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -302,36 +193,35 @@ fun SkillTreeScreen(
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         CanvaIconBadge(
-                                            accentColor = nodeColor,
-                                            badgeSize = if (node.isRoot) 48.dp else 40.dp,
-                                            cornerRadius = 14.dp,
-                                            isActive = isUnlocked || canUnlock
+                                            accentColor = accent,
+                                            badgeSize = 48.dp,
+                                            cornerRadius = 16.dp
                                         ) {
-                                            CanvaAbilityNodeIcon(
-                                                type = node.iconType,
-                                                tint = nodeColor,
-                                                modifier = Modifier.size(22.dp)
-                                            )
+                                            if (node.isBossBattle) {
+                                                CanvaBossCrownIcon(tint = StarGold, modifier = Modifier.size(26.dp))
+                                            } else {
+                                                CanvaDiamondIcon(tint = accent, modifier = Modifier.size(22.dp))
+                                            }
                                         }
 
-                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Spacer(modifier = Modifier.width(14.dp))
 
                                         Column {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Box(
                                                     modifier = Modifier
-                                                        .clip(RoundedCornerShape(6.dp))
-                                                        .background(nodeColor.copy(alpha = 0.2f))
-                                                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(accent.copy(alpha = 0.2f))
+                                                        .padding(horizontal = 8.dp, vertical = 3.dp)
                                                 ) {
                                                     Text(
-                                                        text = if (node.isRoot) "שורש מרכזי • ${node.level.name}" else "ענף יכולת • ${node.level.name}",
-                                                        color = nodeColor,
-                                                        fontSize = 10.sp,
+                                                        text = if (node.isBossBattle) "קרב בוס שיחתי" else "רמה ${node.level.name}",
+                                                        color = accent,
+                                                        fontSize = 11.sp,
                                                         fontWeight = FontWeight.ExtraBold
                                                     )
                                                 }
-                                                if (node.isRoot) {
+                                                if (!node.isBossBattle) {
                                                     Spacer(modifier = Modifier.width(8.dp))
                                                     Text(
                                                         text = "$learnedInLevel/${levelWords.size} מילים נלמדו",
@@ -341,76 +231,80 @@ fun SkillTreeScreen(
                                                 }
                                             }
 
-                                            Spacer(modifier = Modifier.height(5.dp))
+                                            Spacer(modifier = Modifier.height(6.dp))
                                             Text(
                                                 text = node.titleHe,
-                                                color = if (isUnlocked || canUnlock) Color.White else Color.Gray,
-                                                fontSize = if (node.isRoot) 16.sp else 15.sp,
+                                                color = Color.White,
+                                                fontSize = 17.sp,
                                                 fontWeight = FontWeight.ExtraBold
                                             )
+                                            Spacer(modifier = Modifier.height(3.dp))
                                             Text(
-                                                text = node.subtitleHe,
+                                                text = node.descriptionHe,
                                                 color = Color.LightGray,
-                                                fontSize = 12.sp
+                                                fontSize = 13.sp
                                             )
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
 
-                                    // תג מצב: פתוח לאימון / כפתור פתיחה בנקודות / נעול
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(
-                                                when {
-                                                    isUnlocked -> TealDark
-                                                    canUnlock -> StarGold
-                                                    else -> Color(0xFF1A2133)
-                                                }
-                                            )
-                                            .padding(horizontal = 10.dp, vertical = 7.dp)
+                                    CanvaIconBadge(
+                                        accentColor = accent,
+                                        badgeSize = 38.dp,
+                                        cornerRadius = 12.dp
                                     ) {
-                                        Text(
-                                            text = when {
-                                                isUnlocked -> "התאמן כעת"
-                                                canUnlock -> "פתח (${node.costPoints})"
-                                                else -> "${node.costPoints} נק'"
-                                            },
-                                            color = when {
-                                                isUnlocked -> TealNeon
-                                                canUnlock -> DarkBg
-                                                else -> Color.Gray
-                                            },
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.ExtraBold
-                                        )
+                                        CanvaPlayIcon(tint = accent, modifier = Modifier.size(16.dp))
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "בונוס פתיחה: ${node.unlockRewardHe}",
-                                    color = if (isUnlocked) CheckNeon else StarGold.copy(alpha = 0.85f),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                if (!node.isBossBattle) {
+                                    LinearProgressIndicator(
+                                        progress = { levelProgress.coerceIn(0.06f, 1f) },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(7.dp)
+                                            .clip(RoundedCornerShape(4.dp)),
+                                        color = accent,
+                                        trackColor = Color(0xFF0B101D)
+                                    )
+                                } else {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(StarGold.copy(alpha = 0.14f))
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        CanvaBoltIcon(tint = StarGold, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "לחץ כאן כדי להיכנס לקרב הבוס בסימולציית השיחה!",
+                                            color = StarGold,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
                         }
 
-                        // קו חיבור אנכי של עץ היכולות
-                        if (index < progressionManager.allTreeNodes.size - 1) {
+                        if (index < nodes.size - 1) {
                             Canvas(
                                 modifier = Modifier
                                     .width(4.dp)
-                                    .height(22.dp)
+                                    .height(28.dp)
                             ) {
                                 drawLine(
-                                    brush = Brush.verticalGradient(listOf(nodeColor, TealNeon.copy(alpha = 0.4f))),
+                                    brush = Brush.verticalGradient(listOf(accent, TealNeon)),
                                     start = Offset(size.width / 2f, 0f),
                                     end = Offset(size.width / 2f, size.height),
-                                    strokeWidth = 3.5.dp.toPx(),
-                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f), 0f)
+                                    strokeWidth = 4.dp.toPx(),
+                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f), 0f)
                                 )
                             }
                         }
@@ -418,21 +312,5 @@ fun SkillTreeScreen(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun CanvaAbilityNodeIcon(
-    type: AbilityIconType,
-    tint: Color,
-    modifier: Modifier = Modifier
-) {
-    when (type) {
-        AbilityIconType.ROOT_SEED -> CanvaSkillTreeIcon(tint = tint, modifier = modifier)
-        AbilityIconType.VOCAB_EXPANSION -> CanvaAiDeckIcon(tint = tint, modifier = modifier)
-        AbilityIconType.DIALOGUE_BRANCH -> CanvaSpeakerBubbleIcon(tint = tint, modifier = modifier)
-        AbilityIconType.DIFFICULTY_BOOST -> CanvaBoltIcon(tint = tint, modifier = modifier)
-        AbilityIconType.SPEED_MASTERY -> CanvaFlameIcon(tint = tint, modifier = modifier)
-        AbilityIconType.BOSS_CROWN -> CanvaBossCrownIcon(tint = tint, modifier = modifier)
     }
 }
