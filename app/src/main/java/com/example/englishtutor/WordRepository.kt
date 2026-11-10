@@ -58,49 +58,20 @@ class WordRepository(private val context: Context) {
     private var stepCounter: Int = prefs.getInt("global_step_counter", 0)
     private var isFetchingAiBatch = false
 
-    private val builtInExpansionPool = listOf(
-        WordCard("Hello", "שלום", "A1", "יסודות"),
-        WordCard("Schedule", "לוח זמנים", "A2", "יומיום"),
-        WordCard("Passenger", "נוסע", "A2", "תחבורה"),
-        WordCard("Departure", "המראה / יציאה", "A2", "טיסות"),
-        WordCard("Negotiate", "לנהל משא ומתן", "B2", "עסקים"),
-        WordCard("Inevitable", "בלתי נמנע", "C1", "מתקדם"),
-        WordCard("Obstacle", "מכשול", "B1", "יומיום"),
-        WordCard("Accurate", "מדויק", "B1", "מדע"),
-        WordCard("Enthusiasm", "התלהבות", "B2", "רגשות"),
-        WordCard("Breakthrough", "פריצת דרך", "B2", "טכנולוגיה"),
-        WordCard("Comprehensive", "מקיף / יסודי", "C1", "אקדמיה"),
-        WordCard("Reluctant", "מהסס / חסר רצון", "C1", "רגשות"),
-        WordCard("Sustainable", "בר-קיימא", "B2", "סביבה"),
-        WordCard("Ambiguous", "דו-משמעי / מעורפל", "C1", "תקשורת"),
-        WordCard("Collaborate", "לשתף פעולה", "B2", "עסקים"),
-        WordCard("Elaborate", "לפרט / להרחיב", "C1", "תקשורת"),
-        WordCard("Genuine", "אמיתי / כן", "B2", "יומיום"),
-        WordCard("Mandatory", "חובה", "B2", "חוק"),
-        WordCard("Versatile", "רב-תכליתי / גמיש", "C1", "טכנולוגיה"),
-        WordCard("Simultaneously", "בו-זמנית", "C1", "מתקדם"),
-        WordCard("Accomplish", "להשיג / להשלים", "B1", "קריירה"),
-        WordCard("Sufficient", "מספיק", "B2", "יומיום"),
-        WordCard("Vulnerable", "פגיע / חשוף", "B2", "פסיכולוגיה"),
-        WordCard("Tremendous", "עצום / אדיר", "B2", "תיאור"),
-        WordCard("Postpone", "לדחות למועד אחר", "B1", "עסקים"),
-        WordCard("Hypothesis", "השערה מדעית", "C1", "מדע"),
-        WordCard("Consequence", "השלכה / תוצאה", "B2", "יומיום"),
-        WordCard("Profound", "עמוק / מעמיק", "C1", "פילוסופיה"),
-        WordCard("Resilient", "בעל חוסן / עמיד", "B2", "אישיות"),
-        WordCard("Crucial", "מכריע / קריטי", "B2", "עסקים"),
-        WordCard("Phenomenon", "תופעה", "B2", "מדע"),
-        WordCard("Integrity", "יושרה", "C1", "אישיות"),
-        WordCard("Distinguish", "להבחין / להבדיל", "B2", "חשיבה"),
-        WordCard("Perseverance", "התמדה ונחישות", "C1", "אישיות"),
-        WordCard("Fluctuate", "להשתנות / להתנדנד", "C1", "כלכלה"),
-        WordCard("Incentive", "תמריץ", "B2", "כלכלה"),
-        WordCard("Sophisticated", "מתוחכם", "C2", "מומחה"),
-        WordCard("Unprecedented", "חסר תקדים", "C2", "מומחה"),
-        WordCard("Ubiquitous", "נמצא בכל מקום", "C2", "מומחה"),
-        WordCard("Pragmatic", "מעשי / פרגמטי", "C2", "מומחה"),
-        WordCard("Meticulous", "קפדני / מדוקדק", "C2", "מומחה")
-    )
+    // מסווג אוטומטית מילים ללא רמה מוגדרת ל-A1 עד C2 לפי אורך ומורכבות כדי שכל שלב בעץ יהיה מלא במילים!
+    private fun inferCefrLevelForWord(english: String, explicitCefr: String, index: Int): String {
+        if (explicitCefr.isNotBlank() && explicitCefr != "B1") return explicitCefr.uppercase()
+        val len = english.length
+        return when {
+            len <= 4 -> "A1"
+            len == 5 -> "A2"
+            len in 6..7 -> "B1"
+            len in 8..9 -> "B2"
+            len == 10 -> "C1"
+            len >= 11 -> "C2"
+            else -> listOf("A1", "A2", "B1", "B2", "C1", "C2")[index % 6]
+        }
+    }
 
     @Synchronized
     fun loadWords(): List<WordCard> {
@@ -109,7 +80,6 @@ class WordRepository(private val context: Context) {
         learnedBlacklist.clear()
         hardCooldownMap.clear()
 
-        // 1. טעינת המילים שהמשתמש הוסיף באמצעות ה-AI (מופיעות ראשונות!)
         try {
             val savedCustomJson = prefs.getString("custom_deck_words_json", "[]") ?: "[]"
             parseWordsJsonArray(JSONArray(savedCustomJson), wordList, seenKeys)
@@ -117,7 +87,6 @@ class WordRepository(private val context: Context) {
             e.printStackTrace()
         }
 
-        // 2. טעינת קובץ הבסיס מ-assets
         try {
             val jsonString = context.assets.open("words.json").bufferedReader().use { it.readText() }
             parseWordsJsonArray(JSONArray(jsonString), wordList, seenKeys)
@@ -125,7 +94,6 @@ class WordRepository(private val context: Context) {
             e.printStackTrace()
         }
 
-        // 3. טעינת מילים שה-AI שמר ברקע
         try {
             val aiSavedWordsJson = prefs.getString("ai_background_words_json", "[]") ?: "[]"
             parseWordsJsonArray(JSONArray(aiSavedWordsJson), wordList, seenKeys)
@@ -133,30 +101,9 @@ class WordRepository(private val context: Context) {
             e.printStackTrace()
         }
 
-        // 4. מיזוג מאגר ההרחבה לכל רמות ה-CEFR (A1 עד C2)
-        for (extra in builtInExpansionPool) {
-            val key = extra.normalizedKey
-            if (seenKeys.add(key)) {
-                val isLearned = prefs.getBoolean("${key}_learned", false)
-                val isHard = prefs.getBoolean("${key}_hard", false) && !isLearned
-                val dueStep = prefs.getInt("${key}_due_step", 0)
-
-                if (isLearned) learnedBlacklist.add(key)
-                if (isHard && dueStep > stepCounter) hardCooldownMap[key] = dueStep
-
-                wordList.add(
-                    extra.copy(
-                        isLearned = isLearned,
-                        isHard = isHard,
-                        timesSeen = prefs.getInt("${key}_seen", 0),
-                        hardCount = prefs.getInt("${key}_hard_count", 0),
-                        scheduledAtStep = dueStep,
-                        lastSeenTimestamp = prefs.getLong("${key}_last", 0L)
-                    )
-                )
-            }
+        if (wordList.isEmpty()) {
+            wordList.add(WordCard("Start", "התחלה", "A1", "יסודות"))
         }
-
         return wordList
     }
 
@@ -169,7 +116,8 @@ class WordRepository(private val context: Context) {
             val item = jsonArray.optJSONObject(i) ?: continue
             val english = item.optString("english", "").trim()
             val hebrew = item.optString("hebrew", "").trim()
-            val cefr = item.optString("cefr", "B1").trim()
+            val rawCefr = item.optString("cefr", "").trim()
+            val cefr = inferCefrLevelForWord(english, rawCefr, i)
             val category = item.optString("category", "כללי").trim()
             val key = english.lowercase()
 
@@ -214,7 +162,6 @@ class WordRepository(private val context: Context) {
         }.getOrDefault("")
     }
 
-    // --- מחולל חפיסות מילים ב-AI עם גיבוי חכם שמבטיח 100% הצלחה בכל נושא! ---
     suspend fun generateCustomAiDeck(topic: String, count: Int = 10): List<WordCard> = withContext(Dispatchers.IO) {
         val cleanTopic = topic.trim().ifEmpty { "אנגלית שימושית" }
 
@@ -231,8 +178,7 @@ class WordRepository(private val context: Context) {
 
             val systemPrompt = """
                 Return ONLY a valid JSON array of $count English vocabulary words with accurate Hebrew translations about: "$cleanTopic".
-                No markdown, no explanations.
-                Format: [{"english": "Word", "hebrew": "תרגום לעברית", "cefr": "B2", "category": "$cleanTopic"}]
+                Format: [{"english": "Word", "hebrew": "תרגום לעברית", "cefr": "A1", "category": "$cleanTopic"}]
             """.trimIndent()
 
             val messages = JSONArray().apply {
@@ -266,7 +212,7 @@ class WordRepository(private val context: Context) {
                 if (en.length >= 2 && he.isEmpty()) {
                     he = translateQuick(en, "en", "iw")
                 }
-                val cefr = o.optString("cefr", "B2").trim()
+                val cefr = o.optString("cefr", "A1").trim()
                 if (en.length >= 2 && he.isNotEmpty()) {
                     parsed.add(WordCard(english = en, hebrew = he, cefr = cefr, category = cleanTopic))
                 }
@@ -274,11 +220,25 @@ class WordRepository(private val context: Context) {
             parsed
         }.getOrDefault(emptyList())
 
-        // אם שרת ה-AI החיצוני היה ב-Timeout, מייצר מיד חפיסה נושאית חכמה + תרגום חי של הנושא!
         val finalCards = if (onlineCards.isNotEmpty()) {
             onlineCards
         } else {
-            buildSmartTopicFallbackDeck(cleanTopic)
+            val translatedTopicEn = translateQuick(cleanTopic, "iw", "en")
+                .replace(Regex("[^a-zA-Z\\s-]"), "")
+                .trim()
+            val list = mutableListOf<WordCard>()
+            if (translatedTopicEn.length >= 2) {
+                list.add(WordCard(translatedTopicEn.replaceFirstChar { it.uppercase() }, cleanTopic, "A1", cleanTopic))
+            }
+            list.addAll(
+                listOf(
+                    WordCard("Architecture", "ארכיטקטורת מערכת", "A1", cleanTopic),
+                    WordCard("Deployment", "פריסה / העלאה לאוויר", "A1", cleanTopic),
+                    WordCard("Opportunity", "הזדמנות", "A1", cleanTopic),
+                    WordCard("Strategy", "אסטרטגיה", "A1", cleanTopic)
+                )
+            )
+            list.distinctBy { it.normalizedKey }
         }
 
         if (finalCards.isNotEmpty()) {
@@ -286,7 +246,6 @@ class WordRepository(private val context: Context) {
             val customArray = runCatching { JSONArray(existingCustom) }.getOrDefault(JSONArray())
             val updatedArray = JSONArray()
 
-            // מוסיף את המילים החדשות לראש המאגר כדי שיופיעו מיד!
             for (card in finalCards) {
                 updatedArray.put(JSONObject().apply {
                     put("english", card.english)
@@ -302,63 +261,6 @@ class WordRepository(private val context: Context) {
         }
 
         return@withContext finalCards
-    }
-
-    private fun buildSmartTopicFallbackDeck(topicHe: String): List<WordCard> {
-        val result = mutableListOf<WordCard>()
-        // מתרגם את הנושא עצמו לאנגלית אם המשתמש הקליד מילה או ביטוי ספציפי
-        val translatedTopicEn = translateQuick(topicHe, "iw", "en")
-            .replace(Regex("[^a-zA-Z\\s-]"), "")
-            .trim()
-        if (translatedTopicEn.length >= 2) {
-            result.add(WordCard(translatedTopicEn.replaceFirstChar { it.uppercase() }, topicHe, "B2", topicHe))
-        }
-
-        val topicCards = when {
-            topicHe.contains("תכנות") || topicHe.contains("אנדרואיד") || topicHe.contains("הייטק") || topicHe.contains("מחשב") -> listOf(
-                WordCard("Architecture", "ארכיטקטורת מערכת", "B2", topicHe),
-                WordCard("Deployment", "פריסה / העלאה לאוויר", "B2", topicHe),
-                WordCard("Concurrency", "מקביליות", "C1", topicHe),
-                WordCard("Latency", "זמן שיהוי / השהיה", "C1", topicHe),
-                WordCard("Repository", "מאגר קוד", "B2", topicHe),
-                WordCard("Authentication", "אימות זהות", "B2", topicHe),
-                WordCard("Encryption", "הצפנה", "B2", topicHe),
-                WordCard("Scalability", "יכולת גדילה והתרחבות", "C1", topicHe)
-            )
-            topicHe.contains("אוכל") || topicHe.contains("מסעד") || topicHe.contains("בישול") -> listOf(
-                WordCard("Appetizer", "מנה ראשונה", "B1", topicHe),
-                WordCard("Ingredient", "מרכיב במתכון", "B1", topicHe),
-                WordCard("Beverage", "משקה", "B2", topicHe),
-                WordCard("Delicacy", "מעדן", "C1", topicHe),
-                WordCard("Cutlery", "סכו״ם", "B2", topicHe),
-                WordCard("Reservation", "הזמנת שולחן", "B1", topicHe),
-                WordCard("Savory", "מלוח / מתובל", "B2", topicHe),
-                WordCard("Complimentary", "על חשבון הבית / חינם", "B2", topicHe)
-            )
-            topicHe.contains("טיול") || topicHe.contains("טיסה") || topicHe.contains("חו״ל") || topicHe.contains("מלון") -> listOf(
-                WordCard("Itinerary", "מסלול טיול מתוכנן", "C1", topicHe),
-                WordCard("Accommodation", "לינה / מגורים", "B2", topicHe),
-                WordCard("Destination", "יעד נסיעה", "B1", topicHe),
-                WordCard("Luggage", "מזוודות / כבודה", "B1", topicHe),
-                WordCard("Boarding", "עלייה למטוס", "B1", topicHe),
-                WordCard("Customs", "מכס", "B1", topicHe),
-                WordCard("Souvenir", "מזכרת", "B1", topicHe),
-                WordCard("Currency", "מטבע חוץ", "B2", topicHe)
-            )
-            else -> listOf(
-                WordCard("Opportunity", "הזדמנות", "B1", topicHe),
-                WordCard("Perspective", "נקודת מבט", "B2", topicHe),
-                WordCard("Significant", "משמעותי", "B2", topicHe),
-                WordCard("Strategy", "אסטרטגיה", "B1", topicHe),
-                WordCard("Initiative", "יוזמה", "B2", topicHe),
-                WordCard("Priority", "עדיפות", "B1", topicHe),
-                WordCard("Objective", "מטרה / יעד", "B2", topicHe),
-                WordCard("Outcome", "תוצאה סופית", "B2", topicHe)
-            )
-        }
-
-        result.addAll(topicCards)
-        return result.distinctBy { it.normalizedKey }
     }
 
     fun exportProgressToJson(words: List<WordCard>): String {
@@ -393,7 +295,7 @@ class WordRepository(private val context: Context) {
                     customArray.put(JSONObject().apply {
                         put("english", en)
                         put("hebrew", he)
-                        put("cefr", "B1")
+                        put("cefr", "A1")
                         put("category", "ייבוא אישי")
                     })
                     count++
@@ -452,7 +354,7 @@ class WordRepository(private val context: Context) {
                     doOutput = true
                 }
 
-                val systemPrompt = "Return ONLY a raw JSON array of 8 vocabulary objects: [{\"english\":\"...\",\"hebrew\":\"...\",\"cefr\":\"B2\",\"category\":\"כללי\"}] avoiding: $sampleExisting"
+                val systemPrompt = "Return ONLY a raw JSON array of 8 vocabulary objects: [{\"english\":\"...\",\"hebrew\":\"...\",\"cefr\":\"B1\",\"category\":\"כללי\"}] avoiding: $sampleExisting"
                 val messages = JSONArray().apply {
                     put(JSONObject().put("role", "system").put("content", systemPrompt))
                 }
