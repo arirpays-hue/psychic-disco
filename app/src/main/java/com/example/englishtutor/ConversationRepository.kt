@@ -40,6 +40,11 @@ data class ConversationScenario(
     val isAiGenerated: Boolean = false
 )
 
+data class FreeChatResponse(
+    val replyEn: String,
+    val correctionHe: String?
+)
+
 class ConversationRepository(private val context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("conversations_prefs_v3", Context.MODE_PRIVATE)
@@ -66,13 +71,11 @@ class ConversationRepository(private val context: Context) {
         return list
     }
 
-    // מסיר תווים בעברית אם ה-AI שילב בטעות מילים בעברית בתוך המשפט באנגלית
     private fun sanitizeEnglishOnly(text: String, fallback: String): String {
         val withoutHebrew = text.replace(Regex("[\\u0590-\\u05FF]+"), "").replace("()", "").replace("  ", " ").trim()
         return if (withoutHebrew.length >= 4) withoutHebrew else fallback
     }
 
-    // מתרגם אוטומטית מאנגלית לעברית דרך שירות תרגום חינמי אם ה-AI החזיר שדה תרגום ריק
     private fun translateEnToHeFallback(englishText: String): String {
         if (englishText.isBlank()) return ""
         return runCatching {
@@ -130,7 +133,6 @@ class ConversationRepository(private val context: Context) {
             val rawSpeakerEn = nObj.optString("speakerLineEn").trim()
             val speakerLineEn = sanitizeEnglishOnly(rawSpeakerEn, "Hello! Could you please explain the details so I can assist you?")
 
-            // תומך בכל שמות השדות האפשריים שה-AI עלול להחזיר עבור התרגום לעברית
             var speakerLineHe = nObj.optString("speakerLineHe").ifBlank {
                 nObj.optString("hebrew").ifBlank { nObj.optString("translation") }
             }.trim()
@@ -185,7 +187,6 @@ class ConversationRepository(private val context: Context) {
         } else null
     }
 
-    // משלים תרגומים חסרים לעברית ב-JSON שהגיע מה-AI לפני השמירה
     private fun enrichMissingHebrewTranslations(scenarioObj: JSONObject) {
         val nodesArr = scenarioObj.optJSONArray("nodes") ?: return
         for (i in 0 until nodesArr.length()) {
@@ -336,7 +337,6 @@ class ConversationRepository(private val context: Context) {
         throw IllegalArgumentException("Invalid JSON Array format")
     }
 
-    // --- מחולל שיחות חכם עם 100% אנגלית טהורה ב-speakerLineEn ותרגום עברי מלא ב-speakerLineHe ---
     private fun buildSmartDynamicScenarioJson(topicHe: String, difficultyHe: String): JSONObject {
         val t = topicHe.trim()
         val isSecurityAirport = t.contains("ביטחונית") || t.contains("שדה תעופה") || t.contains("תשאול") || t.contains("טיסה")
@@ -592,7 +592,6 @@ class ConversationRepository(private val context: Context) {
             """.trimIndent())
         }
 
-        // תבנית דינמית חכמה ב-100% אנגלית טהורה עבור כל נושא חופשי אחר (ללא עברית בתוך האנגלית!)
         return JSONObject().apply {
             put("id", "ai_${System.currentTimeMillis()}")
             put("categoryHe", "שיחות AI ✨")
@@ -652,13 +651,6 @@ class ConversationRepository(private val context: Context) {
                         put("feedbackHe", "✗ שגיאה! המילה money אינה ספירה באנגלית—שואלים 'How much does it cost?' ולא 'How many moneys'.")
                         put("isOptimal", false)
                     })
-                    put(JSONObject().apply {
-                        put("textEn", "Yes, I prefer yesterday morning.")
-                        put("textHe", "כן, אני מעדיף את אתמול בבוקר.")
-                        put("nextNodeId", "step2")
-                        put("feedbackHe", "✗ תשובה חסרת היגיון שלא עונה לבחירה בין המסלולים.")
-                        put("isOptimal", false)
-                    })
                 })
             })
 
@@ -713,12 +705,35 @@ class ConversationRepository(private val context: Context) {
                 put("speakerName", "Representative")
                 put("speakerLineEn", "All set! Your official confirmation has been sent to your email. Thank you, and have a wonderful day!")
                 put("speakerLineHe", "הכל מוכן! האישור הרשמי שלך נשלח לאימייל. תודה רבה ושיהיה לך יום נפלא!")
-                put("isEnding", true,
-                )
+                put("isEnding", true)
                 put("options", JSONArray())
             })
 
             put("nodes", nodes)
+        }
+    }
+
+    suspend fun generateFreeChatReply(userMessage: String, history: List<ChatMessage>): FreeChatResponse = withContext(Dispatchers.IO) {
+        runCatching {
+            val systemPrompt = """
+                You are a friendly, conversational English tutor for Hebrew speakers.
+                Respond in natural, engaging English (1-2 sentences).
+                Analyze the user's sentence for grammar, phrasing, or spelling mistakes:
+                - If there is a mistake, explain it constructively in Hebrew in "correctionHe".
+                - If the English is completely natural and correct, set "correctionHe" to null.
+                Format output strictly as JSON: {"replyEn": "...", "correctionHe": "..."}
+            """.trimIndent()
+
+            val jsonStr = requestAiJson(systemPrompt, userMessage)
+            val obj = extractCleanJsonObject(jsonStr)
+            val replyEn = sanitizeEnglishOnly(obj.optString("replyEn"), "That sounds very interesting! Tell me more about that.")
+            val correctionHe = if (obj.has("correctionHe") && !obj.isNull("correctionHe") && obj.getString("correctionHe").isNotBlank()) {
+                obj.getString("correctionHe")
+            } else null
+
+            FreeChatResponse(replyEn, correctionHe)
+        }.getOrElse {
+            FreeChatResponse("That sounds really interesting! Tell me more about that.", null)
         }
     }
 
