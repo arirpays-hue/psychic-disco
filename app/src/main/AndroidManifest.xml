@@ -12,6 +12,8 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+        <package android:name="com.google.android.tts" />
+        <package android:name="com.google.android.googlequicksearchbox" />
     </queries>
 
     <application
@@ -33,7 +35,6 @@
             </intent-filter>
         </activity>
 
-        <!-- רישום הווידג'ט למסך הבית -->
         <receiver
             android:name=".WordWidgetReceiver"
             android:exported="true">
