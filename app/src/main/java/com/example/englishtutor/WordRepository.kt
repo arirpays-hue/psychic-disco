@@ -5,6 +5,13 @@ import android.content.SharedPreferences
 import org.json.JSONArray
 import kotlin.random.Random
 
+enum class StudyFilter(val label: String) {
+    SMART("תור חכם"),
+    UNLEARNED("לא נלמדו"),
+    HARD("קשות בלבד"),
+    ALL("הכל")
+}
+
 enum class CefrLevel(val label: String) {
     ALL("כל הרמות"),
     A1("A1 - מתחילים"),
@@ -35,15 +42,15 @@ class WordRepository(private val context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("smart_words_prefs_v3", Context.MODE_PRIVATE)
 
-    private val learnedBlacklist = HashSet<String>()
-    private val hardCooldownMap = HashMap<String, Int>()
-    private val recentHistory = ArrayDeque<String>(10)
+    private val learnedBlacklist = mutableSetOf<String>()
+    private val hardCooldownMap = mutableMapOf<String, Int>()
+    private val recentHistory = mutableListOf<String>()
     private var stepCounter: Int = prefs.getInt("global_step_counter", 0)
 
     @Synchronized
     fun loadWords(): List<WordCard> {
         val wordList = mutableListOf<WordCard>()
-        val seenKeys = HashSet<String>()
+        val seenKeys = mutableSetOf<String>()
         learnedBlacklist.clear()
         hardCooldownMap.clear()
 
@@ -64,8 +71,12 @@ class WordRepository(private val context: Context) {
                     val isHard = prefs.getBoolean("${key}_hard", false) && !isLearned
                     val dueStep = prefs.getInt("${key}_due_step", 0)
 
-                    if (isLearned) learnedBlacklist.add(key)
-                    if (isHard && dueStep > stepCounter) hardCooldownMap[key] = dueStep
+                    if (isLearned) {
+                        learnedBlacklist.add(key)
+                    }
+                    if (isHard && dueStep > stepCounter) {
+                        hardCooldownMap[key] = dueStep
+                    }
 
                     wordList.add(
                         WordCard(
@@ -101,8 +112,10 @@ class WordRepository(private val context: Context) {
         word.lastSeenTimestamp = System.currentTimeMillis()
 
         recentHistory.remove(key)
-        recentHistory.addLast(key)
-        while (recentHistory.size > 8) recentHistory.removeFirst()
+        recentHistory.add(key)
+        while (recentHistory.size > 8) {
+            recentHistory.removeAt(0)
+        }
 
         when {
             learned == true -> {
@@ -175,26 +188,47 @@ class WordRepository(private val context: Context) {
     ): WordCard? {
         if (allWords.isEmpty()) return null
 
-        val levelFiltered = if (selectedCefr == CefrLevel.ALL) allWords
-        else allWords.filter { it.cefr.equals(selectedCefr.name, ignoreCase = true) }
+        val levelFiltered = if (selectedCefr == CefrLevel.ALL) {
+            allWords
+        } else {
+            allWords.filter { it.cefr.equals(selectedCefr.name, ignoreCase = true) }
+        }
 
         val pool = levelFiltered.ifEmpty { allWords }
         val excludedKey = excludedEnglish?.trim()?.lowercase()
 
         val candidates = when (filter) {
-            StudyFilter.SMART, StudyFilter.UNLEARNED -> pool.filter { !it.isLearned && !learnedBlacklist.contains(it.normalizedKey) }
-            StudyFilter.HARD -> pool.filter { it.isHard && !it.isLearned && !learnedBlacklist.contains(it.normalizedKey) }
+            StudyFilter.SMART, StudyFilter.UNLEARNED -> pool.filter { card ->
+                !card.isLearned && !learnedBlacklist.contains(card.normalizedKey)
+            }
+            StudyFilter.HARD -> pool.filter { card ->
+                card.isHard && !card.isLearned && !learnedBlacklist.contains(card.normalizedKey)
+            }
             StudyFilter.ALL -> pool
         }
 
         if (candidates.isEmpty()) return null
+        if (candidates.size == 1) return candidates.first()
+
         val withoutCurrent = candidates.filter { it.normalizedKey != excludedKey }.ifEmpty { candidates }
 
-        return withoutCurrent.maxByOrNull { card ->
+        val readyPool = withoutCurrent.filter { card ->
+            val key = card.normalizedKey
+            val cooldownUntil = hardCooldownMap[key] ?: 0
+            stepCounter >= cooldownUntil && !recentHistory.contains(key)
+        }
+
+        val finalPool = readyPool.ifEmpty { withoutCurrent }
+
+        return finalPool.maxByOrNull { card ->
             val key = card.normalizedKey
             var score = 100.0
-            if (card.isHard && stepCounter >= (hardCooldownMap[key] ?: 0)) score += 200.0
-            if (card.timesSeen == 0) score += 80.0
+            if (card.isHard && stepCounter >= (hardCooldownMap[key] ?: 0)) {
+                score += 220.0
+            }
+            if (card.timesSeen == 0) {
+                score += 85.0
+            }
             score + Random.nextDouble(-10.0, 10.0)
         }
     }
